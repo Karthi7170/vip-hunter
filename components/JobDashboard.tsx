@@ -12,6 +12,7 @@ import {
   LogOut,
   Mail,
   MapPin,
+  Play,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -202,6 +203,10 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
     if (error) setStatus(error.message);
   }
 
+  function autoApply(job: Job) {
+    window.dispatchEvent(new CustomEvent("vip-hunter:auto-apply-job", { detail: job }));
+  }
+
   async function refresh() {
     setLoading(true);
     setStatus("Searching the past 7 days across Tamil Nadu, Kerala and Bengaluru…");
@@ -325,6 +330,9 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
                   <select value={apps[job.id] || "new"} onChange={(event) => setApp(job.id, event.target.value as AppStatus)}>
                     {statuses.map((value) => <option key={value} value={value}>{value.replace("_", " ")}</option>)}
                   </select>
+                  <button type="button" className="auto-apply-job-button" onClick={() => autoApply(job)}>
+                    <Play size={14} /> Auto Apply
+                  </button>
                   <button type="button" className="ats-resume-button" onClick={() => setAtsJobId((current) => current === job.id ? null : job.id)}>
                     <Sparkles size={14} /> {atsJobId === job.id ? "Close ATS Generator" : "ATS Resume"}
                   </button>
