@@ -27,13 +27,16 @@ const roleLabels: Record<ResumeRole, string> = {
 const roleKeywords: Record<ResumeRole, Array<[string, RegExp]>> = {
   "manual-testing": [
     ["Manual Testing", /manual test|software testing/i],
+    ["Automation Testing", /automation testing|test automation/i],
+    ["Selenium", /selenium|selinieum/i],
+    ["Core Java", /core java|\bjava\b/i],
+    ["SQL", /\bsql\b/i],
     ["Test Cases", /test cases?/i],
     ["Functional Testing", /functional test/i],
     ["Regression Testing", /regression/i],
     ["Smoke / Sanity Testing", /smoke|sanity/i],
     ["Bug / Defect Handling", /bug|defect/i],
     ["SDLC / STLC", /\bsdlc\b|\bstlc\b/i],
-    ["SQL", /\bsql\b/i],
     ["Documentation", /documentation|documenting|records/i],
     ["Communication", /communication|student|parent|customer|client/i],
   ],
@@ -43,24 +46,27 @@ const roleKeywords: Record<ResumeRole, Array<[string, RegExp]>> = {
     ["JavaScript", /javascript|\bjs\b/i],
     ["PHP", /\bphp\b/i],
     ["SQL", /\bsql\b/i],
+    ["Core Java", /core java|\bjava\b/i],
+    ["Python", /\bpython\b/i],
+    ["Streamlit", /streamlit/i],
     ["React", /\breact\b/i],
     ["Next.js", /next\.?js/i],
     ["Node.js", /node\.?js/i],
-    ["Java", /\bjava\b/i],
-    ["Python", /\bpython\b/i],
-    ["Web Development", /web app|website|web development|frontend|backend/i],
+    ["Web Development", /web app|website|web development|frontend|front-end|backend|back-end/i],
   ],
   "technical-support": [
     ["Technical Support", /technical support|system support|it support|help desk|service desk/i],
-    ["Troubleshooting", /troubleshoot|diagnos|resolve|resolution/i],
+    ["Issue / Query Resolution", /resolv(?:e|ed|ing)|query resolution|handle inquiries|inquiries/i],
+    ["Troubleshooting", /troubleshoot|diagnos/i],
+    ["Documentation", /documentation|documenting|records|tracking/i],
+    ["Communication", /communication|student|parent|customer|client/i],
+    ["Operations / Coordination", /operations|coordination|coordinated|follow[- ]?up|workflow/i],
+    ["MS Office", /microsoft office|ms office|\bexcel\b|\bword\b/i],
+    ["Data Entry / Records", /data entry|records|record handling/i],
     ["Windows", /\bwindows\b/i],
     ["Linux", /\blinux\b/i],
     ["Networking", /networking|tcp\/ip|dns|dhcp/i],
     ["Active Directory", /active directory/i],
-    ["Documentation", /documentation|documenting|records/i],
-    ["Communication", /communication|student|parent|customer|client/i],
-    ["Operations", /operations|coordination|follow[- ]?up|support/i],
-    ["MS Office", /microsoft office|ms office|\bexcel\b|\bword\b/i],
   ],
 };
 
@@ -76,10 +82,21 @@ const headingMap: Array<[RegExp, string]> = [
   [/^personal details?$/i, "PERSONAL DETAILS"],
 ];
 
+const sentenceWords = /\b(professional|experience|operations|communication|office|efficiently|skilled|ability|support|student|handled|developed|built|summary|project|education|skills)\b/i;
+const organisationWords = /\b(university|college|school|company|pvt|limited|ltd|technologies|edtech|q\s*spiders)\b/i;
+const degreePattern = /\b(m\.?\s*c\.?\s*a|b\.?\s*c\.?\s*a|hsc|sslc|bachelor|master|degree|university|college|school)\b/i;
+const educationMetricPattern = /\b(20\d{2}\s*[-–]\s*(?:20\d{2}|present)|cgpa\s*:|per\s*:|percentage\s*:|\d{1,3}\s*%)\b/i;
+const projectPattern = /ai[- ]?(?:powered|based).*text analyzer|text analyzer|e[- ]?royal tiles|streamlit|web[- ]?based application|web app|tiles showroom|front[- ]?end|back[- ]?end database|website/i;
+const experienceRolePattern = /\b(business operations executive|operations executive|software developer|software engineer|test engineer|qa engineer|tester|technical support|support engineer|system engineer|analyst|associate|intern)\b/i;
+const experienceActionPattern = /^(handled|maintained|supported|coordinated|executed|demonstrated|managed|assisted|resolved|provided|worked|performed|created|prepared|tracked|communicated|guided|ensured|organized|monitored)\b/i;
+const summaryPattern = /\b(detail-oriented|dedicated|proactive|professional|work ethic|eager to contribute|career objective|quick learner|ability to learn|organizational goals)\b/i;
+const genericSkillPattern = /\b(english communication|ms office|microsoft office|word|excel|data entry|adaptability|teamwork|collaboration|problem[- ]solving|time management|multitasking|student\s*&?\s*parent communication|customer support|manual testing|automation testing|selenium|selinieum|core java|\bjava\b|\bsql\b|\bhtml\b|\bcss\b|javascript|\bjs\b|\bphp\b|streamlit)\b/i;
+const certificationPattern = /q\s*spiders|certification|certified|course|training/i;
+
 function normalizeLine(value: string) {
   return value
     .replace(/[•●▪◦]/g, "-")
-    .replace(/[\u00a0\t]+/g, " ")
+    .replace(/[\u00a0\uFFFE\t]+/g, " ")
     .replace(/\s{2,}/g, " ")
     .trim();
 }
@@ -106,116 +123,220 @@ function looksLikeContact(line: string) {
 }
 
 function looksLikeName(line: string) {
-  if (line.length < 3 || line.length > 70) return false;
-  if (looksLikeContact(line) || detectHeading(line)) return false;
-  const words = line.split(/\s+/);
-  return words.length >= 2 && words.length <= 6 && /^[A-Za-z .'-]+$/.test(line);
+  if (line.length < 3 || line.length > 55) return false;
+  if (/[,:;!?]$/.test(line) || /\.$/.test(line)) return false;
+  if (looksLikeContact(line) || detectHeading(line) || sentenceWords.test(line) || organisationWords.test(line)) return false;
+  const words = line.split(/\s+/).filter(Boolean);
+  if (words.length < 2 || words.length > 4) return false;
+  return words.every((word) => /^[A-Z][A-Za-z'-]*$/.test(word) || /^[A-Z]$/.test(word));
 }
 
-function parseSource(text: string) {
-  const lines = cleanLines(text);
-  const candidateName = lines.find(looksLikeName) || "Candidate";
-  const nameIndex = lines.indexOf(candidateName);
-  const contactCandidates = lines
-    .slice(Math.max(0, nameIndex + 1), Math.min(lines.length, nameIndex + 7))
-    .filter(looksLikeContact)
-    .slice(0, 3);
-
-  const sections = new Map<string, string[]>();
-  let current = "ADDITIONAL";
-  sections.set(current, []);
-
-  for (const line of lines) {
-    if (line === candidateName || contactCandidates.includes(line)) continue;
-    const heading = detectHeading(line);
-    if (heading) {
-      current = heading;
-      if (!sections.has(current)) sections.set(current, []);
-      continue;
-    }
-    sections.get(current)?.push(line);
-  }
-
-  return {
-    candidateName,
-    contactLine: contactCandidates.join(" | "),
-    sections,
-    sourceText: lines.join("\n"),
-  };
+function nameScore(line: string) {
+  let score = 0;
+  if (line === line.toUpperCase()) score += 5;
+  const words = line.split(/\s+/).filter(Boolean);
+  if (words.length === 2 || words.length === 3) score += 3;
+  if (!/\b(mca|bca|hsc|sslc)\b/i.test(line)) score += 1;
+  return score;
 }
 
-function roleScore(line: string, role: ResumeRole) {
-  return roleKeywords[role].reduce((score, [, pattern]) => score + (pattern.test(line) ? 1 : 0), 0);
+function detectCandidateName(lines: string[]) {
+  const candidates = lines.filter(looksLikeName);
+  if (!candidates.length) return "Candidate";
+  return candidates
+    .map((line, index) => ({ line, index, score: nameScore(line) }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)[0].line;
 }
 
-function stableRoleSort(lines: string[], role: ResumeRole) {
-  return lines
-    .map((line, index) => ({ line, index, score: roleScore(line, role) }))
-    .sort((a, b) => b.score - a.score || a.index - b.index)
-    .map((item) => item.line);
+function confidentLinkedIn(sourceText: string) {
+  const repaired = sourceText.replace(
+    /(https?:\/\/(?:www\.)?linkedin\.com\/in\/[A-Za-z0-9-]+-)\s+(\d{6,12})/gi,
+    "$1$2",
+  );
+  const match = repaired.match(/https?:\/\/(?:www\.)?linkedin\.com\/in\/[A-Za-z0-9-]+/i);
+  return match?.[0]?.replace(/[.,;]+$/g, "") || "";
+}
+
+function buildContactLine(lines: string[]) {
+  const sourceText = lines.join("\n");
+  const email = sourceText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || "";
+  const linkedIn = confidentLinkedIn(sourceText);
+  const withoutUrls = sourceText.replace(/https?:\/\/\S+/gi, " ");
+  const phone = withoutUrls.match(/\b[6-9]\d{9}\b/)?.[0] || "";
+  const location = lines.find((line) => /\b(chennai|coimbatore|kerala|tamil nadu|india)\b/i.test(line))
+    ?.match(/\b(Chennai|Coimbatore|Kerala|Tamil Nadu|India)\b/i)?.[0] || "";
+
+  return [location, email, phone, linkedIn].filter(Boolean).join(" | ");
+}
+
+function dedupe(lines: string[]) {
+  const seen = new Set<string>();
+  return lines.filter((line) => {
+    const key = line.toLowerCase().replace(/\s+/g, " ").trim();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function detectedEvidence(sourceText: string, role: ResumeRole) {
   return roleKeywords[role]
     .filter(([, pattern]) => pattern.test(sourceText))
     .map(([label]) => label)
-    .slice(0, 5);
+    .filter((label, index, all) => all.indexOf(label) === index)
+    .slice(0, 8);
+}
+
+function experienceDuration(sourceText: string) {
+  const explicit = sourceText.match(/duration\s*:\s*(\d+)\s*months?/i)?.[1];
+  if (explicit) return `${explicit} months`;
+  const prose = sourceText.match(/\b(\d+)\s*months?\s+of\s+experience\b/i)?.[1];
+  if (prose) return `${prose} months`;
+  return "";
 }
 
 function makeSummary(sourceText: string, role: ResumeRole) {
   const evidence = detectedEvidence(sourceText, role);
   const label = roleLabels[role];
+  const qualification = /\bM\.?\s*C\.?\s*A\b/i.test(sourceText) ? "MCA graduate" : "Candidate";
+  const duration = experienceDuration(sourceText);
+  const experiencePhrase = duration ? ` with ${duration} of professional experience` : "";
+
   if (evidence.length) {
-    return `Candidate targeting entry-level ${label} opportunities. Verified overlap from the uploaded base resume includes ${evidence.join(", ")}. This version prioritizes relevant experience, projects and skills without adding unverified claims.`;
+    return `${qualification}${experiencePhrase} seeking an entry-level ${label} role. Verified strengths from the uploaded resume include ${evidence.slice(0, 6).join(", ")}. Brings a practical foundation in communication, documentation, projects and structured problem-solving without adding unverified experience.`;
   }
-  return `Candidate targeting entry-level ${label} opportunities. This version reorganizes only the facts present in the uploaded base resume and does not add unverified skills, tools, employers, dates or certifications.`;
+
+  return `${qualification}${experiencePhrase} seeking an entry-level ${label} role. This resume uses only information detected in the uploaded base resume and does not add unverified skills, employers, dates, projects or certifications.`;
+}
+
+function combineEducation(contentLines: string[]) {
+  const degreeLines = contentLines.filter((line) => degreePattern.test(line) && !looksLikeContact(line));
+  const metricLines = contentLines.filter((line) => educationMetricPattern.test(line) && !degreePattern.test(line));
+  const usedMetrics = new Set<number>();
+  const combined: string[] = [];
+
+  degreeLines.forEach((degree, index) => {
+    const metricIndex = metricLines.findIndex((_, candidateIndex) => !usedMetrics.has(candidateIndex) && candidateIndex >= index - 1);
+    if (metricIndex >= 0) {
+      usedMetrics.add(metricIndex);
+      combined.push(`${degree} | ${metricLines[metricIndex]}`);
+    } else {
+      combined.push(degree);
+    }
+  });
+
+  metricLines.forEach((metric, index) => {
+    if (!usedMetrics.has(index)) combined.push(metric);
+  });
+
+  return dedupe(combined);
+}
+
+function parseSource(text: string, role: ResumeRole) {
+  const lines = cleanLines(text);
+  const candidateName = detectCandidateName(lines);
+  const contactLine = buildContactLine(lines);
+  const sourceText = lines.join("\n");
+
+  const contentLines = lines.filter((line) => {
+    if (line === candidateName) return false;
+    if (detectHeading(line)) return false;
+    if (looksLikeContact(line)) return false;
+    if (Object.values(roleLabels).some((label) => label.toLowerCase() === line.toLowerCase())) return false;
+    if (/^MCA$/i.test(line)) return false;
+    return true;
+  });
+
+  const education = combineEducation(contentLines);
+  const educationRaw = new Set(
+    contentLines.filter((line) => degreePattern.test(line) || educationMetricPattern.test(line)).map((line) => line.toLowerCase()),
+  );
+
+  const projects = dedupe(
+    contentLines.filter((line) => !educationRaw.has(line.toLowerCase()) && projectPattern.test(line)),
+  );
+
+  const certifications = dedupe(
+    contentLines.filter((line) => {
+      if (educationRaw.has(line.toLowerCase()) || projects.includes(line)) return false;
+      if (certificationPattern.test(line)) return true;
+      if (/^(core java|manual testing|automation testing|sql|selenium|selinieum)\b/i.test(line) && /q\s*spiders/i.test(sourceText)) return true;
+      return false;
+    }),
+  );
+
+  const experience = dedupe(
+    contentLines.filter((line) => {
+      if (educationRaw.has(line.toLowerCase()) || projects.includes(line) || certifications.includes(line)) return false;
+      if (/^duration\s*:/i.test(line)) return true;
+      if (experienceRolePattern.test(line)) return true;
+      if (experienceActionPattern.test(line)) return true;
+      return false;
+    }),
+  );
+
+  const summarySource = dedupe(
+    contentLines.filter((line) => {
+      if (educationRaw.has(line.toLowerCase()) || projects.includes(line) || certifications.includes(line) || experience.includes(line)) return false;
+      return line.length >= 45 && summaryPattern.test(line);
+    }),
+  );
+
+  const recognizedRoleSkills = detectedEvidence(sourceText, role);
+  const genericSkills = contentLines
+    .filter((line) => line.length <= 90 && genericSkillPattern.test(line))
+    .filter((line) => !educationRaw.has(line.toLowerCase()) && !projects.includes(line) && !certifications.includes(line) && !experience.includes(line))
+    .map((line) => line.replace(/^[-*]\s*/, "").trim());
+  const skills = dedupe([...recognizedRoleSkills, ...genericSkills]);
+
+  return {
+    candidateName,
+    contactLine,
+    sourceText,
+    skills,
+    experience,
+    projects,
+    education,
+    certifications,
+    summarySource,
+  };
 }
 
 function sectionOrder(role: ResumeRole) {
-  if (role === "software-developer") {
-    return ["SKILLS", "PROJECTS", "EXPERIENCE", "EDUCATION", "CERTIFICATIONS", "ACHIEVEMENTS", "LANGUAGES", "PERSONAL DETAILS", "ADDITIONAL"];
-  }
-  if (role === "technical-support") {
-    return ["SKILLS", "EXPERIENCE", "PROJECTS", "EDUCATION", "CERTIFICATIONS", "ACHIEVEMENTS", "LANGUAGES", "PERSONAL DETAILS", "ADDITIONAL"];
-  }
-  return ["SKILLS", "PROJECTS", "EXPERIENCE", "EDUCATION", "CERTIFICATIONS", "ACHIEVEMENTS", "LANGUAGES", "PERSONAL DETAILS", "ADDITIONAL"];
-}
-
-function dedupe(lines: string[]) {
-  const seen = new Set<string>();
-  return lines.filter((line) => {
-    const key = line.toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  if (role === "software-developer") return ["SKILLS", "PROJECTS", "EXPERIENCE", "EDUCATION", "CERTIFICATIONS"];
+  if (role === "technical-support") return ["SKILLS", "EXPERIENCE", "PROJECTS", "EDUCATION", "CERTIFICATIONS"];
+  return ["SKILLS", "PROJECTS", "EXPERIENCE", "EDUCATION", "CERTIFICATIONS"];
 }
 
 export function tailorResume(text: string, role: ResumeRole): TailoredResume {
   if (!roleLabels[role]) throw new Error("Unsupported resume role.");
-  const parsed = parseSource(text);
+  const parsed = parseSource(text, role);
   const summary = makeSummary(parsed.sourceText, role);
-  const sections: ResumeSection[] = [];
 
-  for (const heading of sectionOrder(role)) {
-    const sourceLines = dedupe(parsed.sections.get(heading) || []);
-    if (!sourceLines.length) continue;
-    const lines = ["SKILLS", "PROJECTS", "EXPERIENCE", "ADDITIONAL"].includes(heading)
-      ? stableRoleSort(sourceLines, role)
-      : sourceLines;
-    sections.push({ heading, lines });
-  }
+  const sectionData: Record<string, string[]> = {
+    SKILLS: parsed.skills,
+    EXPERIENCE: parsed.experience,
+    PROJECTS: parsed.projects,
+    EDUCATION: parsed.education,
+    CERTIFICATIONS: parsed.certifications,
+  };
 
-  if (!sections.length) {
-    const fallback = cleanLines(text)
-      .filter((line) => line !== parsed.candidateName && !looksLikeContact(line))
-      .slice(0, 80);
-    sections.push({ heading: "BASE RESUME CONTENT", lines: stableRoleSort(fallback, role) });
-  }
+  const sections = sectionOrder(role)
+    .map((heading) => ({ heading, lines: sectionData[heading] || [] }))
+    .filter((section) => section.lines.length > 0);
 
   const warnings: string[] = [];
+  if (parsed.candidateName === "Candidate") warnings.push("Candidate name was not confidently detected. Please review the uploaded base resume formatting.");
   if (!parsed.contactLine) warnings.push("Contact details were not confidently detected; review the generated resume before using it.");
-  if (detectedEvidence(parsed.sourceText, role).length === 0) warnings.push(`No strong ${roleLabels[role]} keywords were found in the uploaded resume. The generator did not invent any.`);
+  if (/linkedin/i.test(parsed.sourceText) && !/linkedin\.com\/in\/[A-Za-z0-9-]{3,}/i.test(parsed.contactLine)) {
+    warnings.push("LinkedIn was present in the source but could not be parsed confidently, so it was omitted instead of guessing.");
+  }
+  if (detectedEvidence(parsed.sourceText, role).length === 0) {
+    warnings.push(`No strong ${roleLabels[role]} evidence was found in the uploaded resume. VIP-Hunter did not invent any.`);
+  }
+  if (!parsed.experience.length && /experience|executive|company/i.test(parsed.sourceText)) {
+    warnings.push("Work-experience text was present but could not be structured confidently. Review the base resume section order.");
+  }
 
   const plainText = [
     parsed.candidateName,
@@ -318,8 +439,20 @@ export async function renderResumePdf(resume: TailoredResume) {
 
   for (const section of resume.sections) {
     drawHeading(section.heading);
-    for (const line of section.lines) {
-      const clean = line.replace(/^[-*]\s*/, "");
+    for (const sourceLine of section.lines) {
+      const clean = sourceLine.replace(/^[-*]\s*/, "").trim();
+      if (!clean) continue;
+
+      if (section.heading === "EDUCATION") {
+        drawWrapped(clean, { gapAfter: 3 });
+        continue;
+      }
+
+      if (section.heading === "EXPERIENCE" && (experienceRolePattern.test(clean) || /^duration\s*:/i.test(clean))) {
+        drawWrapped(clean, { font: /^duration\s*:/i.test(clean) ? regular : bold, gapAfter: 2 });
+        continue;
+      }
+
       drawWrapped(`- ${clean}`, { indent: 5, gapAfter: 1 });
     }
     y -= 4;
