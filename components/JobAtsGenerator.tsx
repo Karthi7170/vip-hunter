@@ -136,7 +136,7 @@ export default function JobAtsGenerator({ job, onClose }: Props) {
     }
 
     setLoading(true);
-    setStatus(`Using your ${profileLabel(selectedProfile)} resume as the base and generating the SKILLS section from this JD while preserving the approved format…`);
+    setStatus(`Analysing the full JD and rebuilding a structured ${profileLabel(selectedProfile)} resume while preserving your approved one-page format…`);
 
     try {
       const { data } = await sb.auth.getSession();
@@ -160,7 +160,7 @@ export default function JobAtsGenerator({ job, onClose }: Props) {
       if (pdfUrl) URL.revokeObjectURL(pdfUrl);
       setPdfUrl(toPdfUrl(payload.pdfBase64));
       setResult(payload);
-      setStatus(`${profileLabel(selectedProfile)} base selected · JD-first skills generated in the same resume format · ATS match ${payload.ats.score}/100.`);
+      setStatus(`${profileLabel(selectedProfile)} resume rebuilt for this JD · identity, education and experience preserved · ATS match ${payload.ats.score}/100.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "ATS resume generation failed.");
     } finally {
@@ -180,7 +180,7 @@ export default function JobAtsGenerator({ job, onClose }: Props) {
       </div>
 
       <div className={styles.explain}>
-        VIP-Hunter keeps your approved one-page format, section order and alignment unchanged. For each job, the SKILLS section is generated from the JD requirements first, using the same fixed six-skill layout. Summary, experience and project claims continue to use your selected base resume as their factual source.
+        VIP-Hunter analyses the full JD, selects the correct role-specific base resume, and rebuilds the content into the approved one-page structure. Candidate identity, contact details, education, work history and project facts stay grounded in the selected resume. Summary, skill priority, experience order and project order are tailored to the JD without changing the format.
       </div>
 
       <div className={styles.profileBox}>
@@ -231,7 +231,7 @@ export default function JobAtsGenerator({ job, onClose }: Props) {
         </label>
         <button className={styles.generate} type="button" onClick={generate} disabled={loading || resumeLoading || !file}>
           {loading ? <LoaderCircle className={styles.spin} size={17} /> : <FileText size={17} />}
-          {loading ? "Tailoring…" : "Tailor selected resume"}
+          {loading ? "Building resume…" : "Generate structured resume"}
         </button>
       </div>
 
@@ -248,14 +248,14 @@ export default function JobAtsGenerator({ job, onClose }: Props) {
           </div>
           {pdfUrl && (
             <a className={styles.download} href={pdfUrl} download={result.filename}>
-              <Download size={16} /> Download tailored PDF
+              <Download size={16} /> Download structured PDF
             </a>
           )}
           {result.ats.matchedKeywords.length > 0 && (
-            <div className={styles.keywords}><b>JD keywords in generated resume</b><p>{result.ats.matchedKeywords.join(" · ")}</p></div>
+            <div className={styles.keywords}><b>JD requirements supported by your resume</b><p>{result.ats.matchedKeywords.join(" · ")}</p></div>
           )}
           {result.ats.missingKeywords.length > 0 && (
-            <div className={styles.missing}><b>JD-derived skills added for review</b><p>{result.ats.missingKeywords.join(" · ")}</p><small>These requirements were taken from the JD because they were not found in the selected base resume. Review them for accuracy before using the resume.</small></div>
+            <div className={styles.missing}><b>JD requirements not evidenced in the selected base resume</b><p>{result.ats.missingKeywords.join(" · ")}</p><small>These are not claimed as existing experience or skills. They remain useful learning/interview targets for this role.</small></div>
           )}
         </div>
       )}
