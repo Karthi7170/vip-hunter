@@ -24,10 +24,29 @@ type GeneratedResume = {
   warnings: string[];
 };
 
+type AtsComponent = {
+  key: string;
+  label: string;
+  score: number;
+  weight: number;
+};
+
+type AtsScore = {
+  overall: number;
+  mode: "job-match" | "readiness";
+  label: string;
+  components: AtsComponent[];
+  matchedKeywords: string[];
+  missingKeywords: string[];
+  notes: string[];
+  disclaimer: string;
+};
+
 type GenerateResponse = {
   filename: string;
   pdfBase64: string;
   resume: GeneratedResume;
+  atsScore: AtsScore;
   sourceFileName: string;
   generatedAt: string;
 };
@@ -69,6 +88,7 @@ export default function ResumeGenerator() {
   const [signedIn, setSignedIn] = useState(false);
   const [role, setRole] = useState<ResumeRole>("manual-testing");
   const [file, setFile] = useState<File | null>(null);
+  const [jobDescription, setJobDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("Upload your base resume and choose a target role.");
   const [result, setResult] = useState<GenerateResponse | null>(null);
@@ -106,7 +126,11 @@ export default function ResumeGenerator() {
     }
 
     setLoading(true);
-    setStatus("Reading your base resume and building a role-focused ATS version…");
+    setStatus(
+      jobDescription.trim()
+        ? "Generating your role-focused resume and comparing it with the job description…"
+        : "Generating your role-focused resume and calculating ATS readiness…",
+    );
 
     try {
       const {
@@ -117,6 +141,7 @@ export default function ResumeGenerator() {
       const form = new FormData();
       form.append("resume", file);
       form.append("role", role);
+      if (jobDescription.trim()) form.append("jobDescription", jobDescription.trim());
 
       const response = await fetch("/api/resume/generate", {
         method: "POST",
@@ -130,7 +155,9 @@ export default function ResumeGenerator() {
       const nextUrl = base64PdfToUrl(data.pdfBase64);
       setPdfUrl(nextUrl);
       setResult(data);
-      setStatus(`${data.resume.roleLabel} resume generated from ${data.sourceFileName}. Review it before applying.`);
+      setStatus(
+        `${data.resume.roleLabel} resume generated · ${data.atsScore.label}: ${data.atsScore.overall}/100. Review it before applying.`,
+      );
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Resume generation failed.");
     } finally {
@@ -160,13 +187,38 @@ export default function ResumeGenerator() {
               key={option.value}
               type="button"
               className={`${styles.roleCard} ${role === option.value ? styles.active : ""}`}
-              onClick={() => setRole(option.value)}
+              onClick={() => {
+                setRole(option.value);
+                setResult(null);
+              }}
             >
               <span className={styles.radio}>{role === option.value ? <CheckCircle2 size={18} /> : null}</span>
               <strong>{option.title}</strong>
               <small>{option.subtitle}</small>
             </button>
           ))}
+        </div>
+
+        <div className={styles.jdBox}>
+          <div className={styles.jdHeader}>
+            <div>
+              <b>Job description for a job-specific ATS match score</b>
+              <small>Optional. Paste the exact JD you plan to apply for.</small>
+            </div>
+            <span>{jobDescription.trim() ? "JD match mode" : "Readiness mode"}</span>
+          </div>
+          <textarea
+            value={jobDescription}
+            onChange={(event) => {
+              setJobDescription(event.target.value.slice(0, 20000));
+              setResult(null);
+            }}
+            placeholder="Paste the complete job description here to measure keyword coverage and role alignment. Leave blank for ATS-readiness scoring only."
+          />
+          <div className={styles.jdFoot}>
+            <span>{jobDescription.length.toLocaleString()} / 20,000 characters</span>
+            <span>The job description is used for scoring only and is not inserted into your resume.</span>
+          </div>
         </div>
 
         <div className={styles.uploadRow}>
@@ -190,7 +242,7 @@ export default function ResumeGenerator() {
 
           <button className={styles.generate} type="button" onClick={generate} disabled={loading || !file}>
             {loading ? <LoaderCircle className={styles.spin} size={18} /> : <FileText size={18} />}
-            {loading ? "Generating…" : "Generate resume"}
+            {loading ? "Generating…" : "Generate + ATS score"}
           </button>
         </div>
 
@@ -230,13 +282,72 @@ export default function ResumeGenerator() {
             </article>
 
             <aside className={styles.side}>
+              <div className={`${styles.sideCard} ${styles.scoreCard}`}>
+                <div className={styles.scoreTop}>
+                  <div className={styles.scoreCircle}>
+                    <strong>{result.atsScore.overall}</strong>
+                    <span>/100</span>
+                  </div>
+                  <div>
+                    <b>{result.atsScore.label}</b>
+                    <p>
+                      {result.atsScore.mode === "job-match"
+                        ? "Calculated against the job description you supplied."
+                        : "Calculated from ATS readability and role-readiness checks."}
+                    </p>
+                  </div>
+                </div>
+
+                <div className={styles.breakdown}>
+                  {result.atsScore.components.map((component) => (
+                    <div key={component.key} className={styles.metric}>
+                      <div>
+                        <span>{component.label}</span>
+                        <b>{component.score}/100</b>
+                      </div>
+                      <div className={styles.track}>
+                        <span style={{ width: `${component.score}%` }} />
+                      </div>
+                      <small>{component.weight}% of overall score</small>
+                    </div>
+                  ))}
+                </div>
+
+                {result.atsScore.matchedKeywords.length > 0 && (
+                  <div className={styles.keywordBlock}>
+                    <b>Matched keywords</b>
+                    <div className={styles.keywordList}>
+                      {result.atsScore.matchedKeywords.slice(0, 14).map((keyword) => (
+                        <span className={styles.matchKeyword} key={keyword}>✓ {keyword}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {result.atsScore.missingKeywords.length > 0 && (
+                  <div className={styles.keywordBlock}>
+                    <b>JD keywords not found in your generated resume</b>
+                    <div className={styles.keywordList}>
+                      {result.atsScore.missingKeywords.slice(0, 14).map((keyword) => (
+                        <span className={styles.missingKeyword} key={keyword}>{keyword}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className={styles.scoreNotes}>
+                  {result.atsScore.notes.map((note) => <p key={note}>• {note}</p>)}
+                </div>
+                <p className={styles.disclaimer}>{result.atsScore.disclaimer}</p>
+              </div>
+
               <div className={styles.sideCard}>
                 <b>What VIP-Hunter changes</b>
-                <p>It creates a consistent single-column ATS layout, adds your selected target-role heading, and reorders existing evidence so the most relevant material appears first.</p>
+                <p>It creates a consistent single-column ATS layout, adds your selected target-role heading, and reorganizes only verified evidence from the base resume.</p>
               </div>
               <div className={styles.sideCard}>
-                <b>What it does not change</b>
-                <p>It does not invent tools, certifications, employers, dates, projects or experience that were not found in the base resume.</p>
+                <b>Score is not printed on your resume</b>
+                <p>The ATS score is analysis for you inside VIP-Hunter. The downloaded PDF stays clean and recruiter-ready.</p>
               </div>
               {result.resume.warnings.length > 0 && (
                 <div className={`${styles.sideCard} ${styles.warning}`}>
