@@ -6,7 +6,7 @@ import { createBrowserSupabase } from "@/lib/supabase-browser";
 import styles from "./ExternalJobSearch.module.css";
 
 type RoleKey = "qa" | "developer" | "support";
-type LocationKey = "chennai" | "coimbatore" | "kerala";
+type LocationKey = "tamilnadu" | "kerala" | "bengaluru";
 
 const roles: Record<RoleKey, { label: string; query: string }> = {
   qa: { label: "Manual Testing / QA", query: "manual testing QA software tester fresher" },
@@ -15,9 +15,9 @@ const roles: Record<RoleKey, { label: string; query: string }> = {
 };
 
 const locations: Record<LocationKey, { label: string; query: string }> = {
-  chennai: { label: "Chennai", query: "Chennai, Tamil Nadu, India" },
-  coimbatore: { label: "Coimbatore", query: "Coimbatore, Tamil Nadu, India" },
-  kerala: { label: "Kerala", query: "Kerala, India" },
+  tamilnadu: { label: "Tamil Nadu · All cities", query: "Tamil Nadu, India" },
+  kerala: { label: "Kerala · All cities", query: "Kerala, India" },
+  bengaluru: { label: "Bengaluru", query: "Bengaluru, Karnataka, India" },
 };
 
 function slug(value: string) {
@@ -32,7 +32,7 @@ export default function ExternalJobSearch() {
   const [ready, setReady] = useState(false);
   const [signedIn, setSignedIn] = useState(false);
   const [role, setRole] = useState<RoleKey>("qa");
-  const [location, setLocation] = useState<LocationKey>("chennai");
+  const [location, setLocation] = useState<LocationKey>("tamilnadu");
 
   useEffect(() => {
     let active = true;
@@ -61,7 +61,8 @@ export default function ExternalJobSearch() {
     const loc = encodeURIComponent(locationData.query);
 
     const naukriRole = slug(roleData.label.replace("/", " "));
-    const naukriLocation = slug(locationData.label);
+    const naukriLocation = slug(locationData.label.replace(" · All cities", ""));
+    const naukriLabel = locationData.label.replace(" · All cities", "");
 
     return [
       {
@@ -72,7 +73,7 @@ export default function ExternalJobSearch() {
       },
       {
         name: "Naukri",
-        href: `https://www.naukri.com/${naukriRole}-jobs-in-${naukriLocation}?k=${q}&l=${encodeURIComponent(locationData.label)}&experience=0&jobAge=7`,
+        href: `https://www.naukri.com/${naukriRole}-jobs-in-${naukriLocation}?k=${q}&l=${encodeURIComponent(naukriLabel)}&experience=0&jobAge=7`,
         freshness: "Past 7 days",
         note: "0-year experience target",
       },
@@ -97,7 +98,7 @@ export default function ExternalJobSearch() {
             </span>
             <h2 className={styles.title}>Search LinkedIn, Naukri and Indeed</h2>
             <p className={styles.description}>
-              Open pre-filtered searches for your target role and city while VIP-Hunter continues scanning free public ATS feeds in the background.
+              Search your target role across all cities in Tamil Nadu, all cities in Kerala, or Bengaluru while VIP-Hunter scans supported public ATS feeds in the background.
             </p>
           </div>
           <span className={styles.badge}>Manual apply · No scraping</span>
