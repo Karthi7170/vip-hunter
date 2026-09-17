@@ -22,13 +22,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Your session is invalid or expired. Sign in again." }, { status: 401 });
     }
 
-    const jobs = await findLiveJobs();
-    const persisted = await persistJobs(jobs);
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("id")
+      .eq("auth_user_id", data.user.id)
+      .maybeSingle();
+
+    const discoveredJobs = await findLiveJobs();
+    const persisted = await persistJobs(discoveredJobs, profile?.id);
 
     return NextResponse.json({
-      jobs,
+      jobs: persisted.jobs,
       persisted: persisted.count,
       windowDays: 7,
+      scope: "Tamil Nadu statewide · Kerala statewide · Bengaluru",
       updatedAt: new Date().toISOString(),
     });
   } catch (error) {
