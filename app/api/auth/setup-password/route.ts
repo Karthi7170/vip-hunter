@@ -5,18 +5,9 @@ export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {
-    const expectedPin = process.env.APP_PIN;
-    if (!expectedPin) {
-      return NextResponse.json(
-        { error: "APP_PIN is not configured on the server." },
-        { status: 500 },
-      );
-    }
-
     const body = await request.json();
     const email = String(body?.email || "").trim().toLowerCase();
     const password = String(body?.password || "");
-    const pin = String(body?.pin || "");
 
     if (!email || !email.includes("@")) {
       return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
@@ -27,10 +18,6 @@ export async function POST(request: NextRequest) {
         { error: "Password must be at least 8 characters." },
         { status: 400 },
       );
-    }
-
-    if (pin !== expectedPin) {
-      return NextResponse.json({ error: "Invalid private setup PIN." }, { status: 401 });
     }
 
     const allowedEmail = process.env.ALLOWED_USER_EMAIL?.trim().toLowerCase();
@@ -53,40 +40,34 @@ export async function POST(request: NextRequest) {
       (user) => user.email?.toLowerCase() === email,
     );
 
-    if (existingUser) {
-      const { error } = await supabase.auth.admin.updateUserById(existingUser.id, {
-        password,
-        email_confirm: true,
-      });
-      if (error) throw error;
-
-      return NextResponse.json({
-        ok: true,
-        message: "Password created. You can sign in now.",
-      });
-    }
-
-    if (!allowedEmail) {
+    if (!existingUser) {
       return NextResponse.json(
-        {
-          error:
-            "No existing account was found for this email. Configure ALLOWED_USER_EMAIL before creating a new account.",
-        },
+        { error: "No existing VIP-Hunter account was found for this email." },
         { status: 404 },
       );
     }
 
-    const { error: createError } = await supabase.auth.admin.createUser({
-      email,
+    if (existingUser.app_metadata?.password_setup_complete === true) {
+      return NextResponse.json(
+        { error: "Password has already been created for this account. Sign in instead." },
+        { status: 409 },
+      );
+    }
+
+    const { error } = await supabase.auth.admin.updateUserById(existingUser.id, {
       password,
       email_confirm: true,
+      app_metadata: {
+        ...existingUser.app_metadata,
+        password_setup_complete: true,
+      },
     });
 
-    if (createError) throw createError;
+    if (error) throw error;
 
     return NextResponse.json({
       ok: true,
-      message: "Account and password created. You can sign in now.",
+      message: "Password created. You can sign in now.",
     });
   } catch (error) {
     return NextResponse.json(
