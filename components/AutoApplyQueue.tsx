@@ -11,6 +11,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { createBrowserSupabase } from "@/lib/supabase-browser";
+import type { Job } from "@/lib/jobs";
 import {
   loadResumeProfile,
   type ResumeProfile,
@@ -70,6 +71,21 @@ function profileLabel(profile: ResumeProfile) {
   if (profile === "software-developer") return "Software Developer";
   if (profile === "technical-support") return "Technical Support";
   return "Manual Testing / QA";
+}
+
+function queueJobFromCard(job: Job): QueueJob {
+  return {
+    jobId: job.id,
+    company: job.company || "Company",
+    title: job.role || "Role",
+    location: job.location || "Not disclosed",
+    applyUrl: job.applyUrl,
+    source: job.source || "Career site",
+    score: Number(job.fit || 0),
+    supported: supportsAssist(job.applyUrl),
+    jobDescription: String(job.jobDescription || "").trim(),
+    resumeProfile: profileForJob(job.type, job.role),
+  };
 }
 
 function estimatedBase64Bytes(base64: string) {
@@ -465,6 +481,18 @@ export default function AutoApplyQueue() {
       { onConflict: "user_id,job_id" },
     );
   }
+
+  useEffect(() => {
+    function onJobCardAutoApply(event: Event) {
+      const job = (event as CustomEvent<Job>).detail;
+      if (!job?.id || !job.applyUrl) return;
+      void launch(queueJobFromCard(job));
+    }
+
+    window.addEventListener("vip-hunter:auto-apply-job", onJobCardAutoApply as EventListener);
+    return () => window.removeEventListener("vip-hunter:auto-apply-job", onJobCardAutoApply as EventListener);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mobileMode, extensionReady, preparing, mobileJobId, profileId]);
 
   if (!ready) return null;
 
