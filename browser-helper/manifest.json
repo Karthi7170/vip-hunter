@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "VIP-Hunter Apply Assistant",
-  "version": "0.2.0",
-  "description": "Autofills and auto-submits simple supported ATS applications, while stopping for CAPTCHA, OTP, legal declarations, logins, or unknown required fields.",
+  "version": "0.3.0",
+  "description": "Generates and uploads a JD-tailored role resume for supported ATS applications, autofills verified fields, and can auto-submit complete forms while stopping for CAPTCHA, OTP, legal declarations, logins, or unknown required fields.",
   "permissions": ["storage", "tabs"],
   "host_permissions": [
     "https://vip-hunter.vercel.app/*",
