@@ -3,11 +3,12 @@ let total = 0;
 let completed = 0;
 let activeTabId = null;
 let pausedTabId = null;
+let activeJob = null;
 let running = false;
 let lastReason = "";
 const processedTabs = new Set();
 
-async function broadcast(state, reason = "") {
+async function broadcast(state, reason = "", extra = {}) {
   lastReason = reason || lastReason;
   const payload = {
     type: "VIP_QUEUE_STATUS",
@@ -16,6 +17,8 @@ async function broadcast(state, reason = "") {
     completed,
     remaining: queue.length,
     reason: reason || lastReason,
+    currentJobId: activeJob?.jobId || "",
+    ...extra,
   };
 
   const tabs = await chrome.tabs.query({ url: "https://vip-hunter.vercel.app/*" });
@@ -25,49 +28,103 @@ async function broadcast(state, reason = "") {
   }
 }
 
+function validPreparedJob(job) {
+  return Boolean(
+    job &&
+    typeof job.url === "string" &&
+    /^https:\/\//i.test(job.url) &&
+    typeof job.jobId === "string" &&
+    job.resume &&
+    typeof job.resume.base64 === "string" &&
+    job.resume.base64.length > 100 &&
+    typeof job.resume.name === "string"
+  );
+}
+
 async function openNext() {
   if (!running || activeTabId || pausedTabId) return;
 
   const next = queue.shift();
   if (!next) {
     running = false;
+    activeJob = null;
     await broadcast("complete", completed ? `${completed} application${completed === 1 ? "" : "s"} submitted.` : "Queue finished.");
     return;
   }
 
-  const tab = await chrome.tabs.create({ url: next, active: false });
+  activeJob = next;
+  await chrome.storage.local.set({
+    vipHunterResume: next.resume,
+    vipHunterCurrentJob: {
+      jobId: next.jobId,
+      company: next.company || "",
+      title: next.title || "",
+      atsScore: Number(next.atsScore || 0),
+      preparedAt: Date.now(),
+    },
+  });
+
+  const tab = await chrome.tabs.create({ url: next.url, active: false });
   activeTabId = tab.id || null;
-  await broadcast("running", "Opening the next supported ATS application…");
+  await broadcast(
+    "running",
+    `Opening ${next.company || "company"} · ${next.title || "application"} with its JD-tailored resume…`,
+  );
 }
 
 async function finishTab(tabId, reason = "") {
   if (!tabId || processedTabs.has(tabId)) return;
   processedTabs.add(tabId);
+  const finishedJob = activeJob;
   completed += 1;
 
   try { await chrome.tabs.remove(tabId); } catch {}
   if (tabId === activeTabId) activeTabId = null;
   if (tabId === pausedTabId) pausedTabId = null;
+  activeJob = null;
 
-  await broadcast("running", reason || "Application submitted. Moving to the next job…");
+  await broadcast(
+    "running",
+    reason || "Application submitted. Moving to the next job…",
+    { jobId: finishedJob?.jobId || "", resultStatus: "submitted" },
+  );
   await openNext();
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
-    if (message?.type === "VIP_START_QUEUE") {
-      const urls = [...new Set((message.urls || []).filter((url) => typeof url === "string"))].slice(0, 20);
-      queue = urls;
-      total = urls.length;
+    if (message?.type === "VIP_START_PREPARED_QUEUE") {
+      const jobs = (Array.isArray(message.jobs) ? message.jobs : [])
+        .filter(validPreparedJob)
+        .slice(0, 20);
+
+      queue = jobs;
+      total = jobs.length;
       completed = 0;
       activeTabId = null;
       pausedTabId = null;
-      running = urls.length > 0;
+      activeJob = null;
+      running = jobs.length > 0;
       lastReason = "";
       processedTabs.clear();
-      await broadcast(urls.length ? "running" : "idle", urls.length ? "Auto-apply queue started." : "No supported 75%+ jobs found on this page.");
+
+      await broadcast(
+        jobs.length ? "running" : "idle",
+        jobs.length
+          ? "JD-tailored Auto Apply queue started."
+          : "No prepared applications with tailored resumes were received.",
+      );
       await openNext();
       sendResponse({ ok: true, total });
+      return;
+    }
+
+    if (message?.type === "VIP_START_QUEUE") {
+      sendResponse({
+        ok: false,
+        total: 0,
+        error: "VIP-Hunter now requires a JD-tailored resume for every Auto Apply job. Start the queue from the VIP-Hunter dashboard.",
+      });
       return;
     }
 
@@ -79,7 +136,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (tabId === activeTabId) activeTabId = null;
         pausedTabId = tabId;
         running = true;
-        await broadcast("paused", message.reason || "This application needs your input before it can continue.");
+        await broadcast(
+          "paused",
+          message.reason || "This application needs your input before it can continue.",
+          { jobId: activeJob?.jobId || "", resultStatus: "action_required" },
+        );
       }
       sendResponse({ ok: true });
       return;
@@ -87,13 +148,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message?.type === "VIP_SKIP_CURRENT") {
       const tabId = pausedTabId || activeTabId;
+      const skippedJob = activeJob;
       pausedTabId = null;
       activeTabId = null;
+      activeJob = null;
       if (tabId) {
         processedTabs.add(tabId);
         try { await chrome.tabs.remove(tabId); } catch {}
       }
-      await broadcast("running", "Skipped the blocked application. Moving to the next job…");
+      await broadcast(
+        "running",
+        "Skipped the blocked application. Moving to the next job…",
+        { jobId: skippedJob?.jobId || "", resultStatus: "action_required" },
+      );
       await openNext();
       sendResponse({ ok: true });
       return;
@@ -105,6 +172,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const tabIds = [activeTabId, pausedTabId].filter(Boolean);
       activeTabId = null;
       pausedTabId = null;
+      activeJob = null;
       for (const tabId of tabIds) {
         try { await chrome.tabs.remove(tabId); } catch {}
       }
@@ -114,7 +182,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     if (message?.type === "VIP_GET_QUEUE_STATUS") {
-      sendResponse({ ok: true, state: running ? (pausedTabId ? "paused" : "running") : "idle", total, completed, remaining: queue.length, reason: lastReason });
+      sendResponse({
+        ok: true,
+        state: running ? (pausedTabId ? "paused" : "running") : "idle",
+        total,
+        completed,
+        remaining: queue.length,
+        reason: lastReason,
+        currentJobId: activeJob?.jobId || "",
+      });
       return;
     }
   })().catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
