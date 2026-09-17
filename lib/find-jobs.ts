@@ -1,6 +1,6 @@
 import type { Job, JobType } from "@/lib/jobs";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+const SEARCH_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_RESULTS = 50;
 
 const leverBoards = [
@@ -25,25 +25,111 @@ const smartRecruitersBoards = [
   { id: "PinnacleSevenTechnologies", name: "Pinnacle Seven Technologies" },
 ];
 
-const targetPlaces = [
+// State names catch ATS records that include the region. City aliases catch feeds
+// that publish only a city name without Tamil Nadu / Kerala in the location string.
+const tamilNaduPlaces = [
+  "tamil nadu",
+  "tamilnadu",
   "chennai",
   "coimbatore",
+  "madurai",
+  "tiruchirappalli",
+  "trichy",
+  "salem",
+  "tiruppur",
+  "tirupur",
+  "erode",
+  "vellore",
+  "tirunelveli",
+  "thoothukudi",
+  "tuticorin",
+  "dindigul",
+  "thanjavur",
+  "nagercoil",
+  "kanchipuram",
+  "kancheepuram",
+  "karur",
+  "cuddalore",
+  "sivakasi",
+  "kumbakonam",
+  "rajapalayam",
+  "pudukkottai",
+  "pudukottai",
+  "ambur",
+  "ranipet",
+  "tiruvannamalai",
+  "pollachi",
+  "namakkal",
+  "krishnagiri",
+  "dharmapuri",
+  "udhagamandalam",
+  "ooty",
+  "avadi",
+  "tambaram",
+  "sriperumbudur",
+  "hosur",
+  "neyveli",
+  "nagapattinam",
+  "mayiladuthurai",
+  "viluppuram",
+  "villupuram",
+  "virudhunagar",
+  "sivaganga",
+  "ramanathapuram",
+  "tenkasi",
+  "theni",
+  "perambalur",
+  "ariyalur",
+  "tirupattur",
+];
+
+const keralaPlaces = [
   "kerala",
   "kochi",
   "cochin",
   "ernakulam",
+  "kakkanad",
+  "aluva",
+  "angamaly",
   "thiruvananthapuram",
   "trivandrum",
   "kozhikode",
   "calicut",
   "thrissur",
-  "kottayam",
+  "trichur",
   "kollam",
+  "quilon",
+  "kottayam",
   "palakkad",
+  "palghat",
   "alappuzha",
+  "alleppey",
   "kannur",
+  "cannanore",
   "malappuram",
+  "kasaragod",
+  "kasargod",
+  "pathanamthitta",
+  "idukki",
+  "wayanad",
+  "kalpetta",
+  "manjeri",
+  "perinthalmanna",
+  "tirur",
+  "kottakkal",
+  "thalassery",
+  "payyanur",
+  "cherthala",
+  "muvattupuzha",
+  "kothamangalam",
+  "irinjalakuda",
+  "guruvayur",
+  "technopark",
+  "infopark",
 ];
+
+const bengaluruPlaces = ["bengaluru", "bangalore"];
+const targetPlaces = [...tamilNaduPlaces, ...keralaPlaces, ...bengaluruPlaces];
 
 const entrySignals = ["fresher", "entry level", "entry-level", "graduate", "trainee", "junior", "associate", "engineer i", "engineer 1"];
 const seniorTitle = /\b(senior|sr\.?|lead|staff|principal|manager|architect|director|head|engineer\s+(ii|iii|iv)|level\s*[2-9])\b/i;
@@ -74,10 +160,10 @@ async function fetchJson<T>(url: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-function withinLast24Hours(value: string | number | undefined) {
+function withinSearchWindow(value: string | number | undefined) {
   if (!value) return false;
   const timestamp = typeof value === "number" ? value : Date.parse(value);
-  return Number.isFinite(timestamp) && Date.now() - timestamp >= 0 && Date.now() - timestamp <= DAY_MS;
+  return Number.isFinite(timestamp) && Date.now() - timestamp >= 0 && Date.now() - timestamp <= SEARCH_WINDOW_MS;
 }
 
 function classifyRole(title: string): JobType | null {
@@ -210,7 +296,7 @@ async function scanLever(board: { slug: string; name: string }): Promise<Job[]> 
   const jobs: Job[] = [];
 
   for (const posting of postings) {
-    if (!posting.createdAt || !withinLast24Hours(posting.createdAt)) continue;
+    if (!posting.createdAt || !withinSearchWindow(posting.createdAt)) continue;
     if (seniorTitle.test(posting.text)) continue;
 
     const type = classifyRole(posting.text);
@@ -291,7 +377,7 @@ async function scanSmartRecruiters(board: { id: string; name: string }): Promise
     `https://api.smartrecruiters.com/v1/companies/${board.id}/postings?limit=100&offset=0&destination=PUBLIC`,
   );
   const candidates = (list.content || []).filter((posting) => {
-    if (!posting.releasedDate || !withinLast24Hours(posting.releasedDate)) return false;
+    if (!posting.releasedDate || !withinSearchWindow(posting.releasedDate)) return false;
     if (seniorTitle.test(posting.name)) return false;
     if (!classifyRole(posting.name)) return false;
     return locationAllowed(smartLocation(posting));
