@@ -1,4 +1,5 @@
 import { tailorResume, type ResumeRole, type TailoredResume } from "@/lib/resume-generator";
+import { polishTailoredResume } from "@/lib/resume-professional";
 
 export type AtsAnalysis = {
   score: number;
@@ -96,7 +97,7 @@ function stableRank(lines: string[], jd: string) {
 
 function analyze(baseText: string, resume: TailoredResume, role: ResumeRole, jd: string): AtsAnalysis {
   const jdKeywords = keywordLabels(jd);
-  const resumeText = `${baseText}\n${resume.plainText}`;
+  const resumeText = resume.plainText;
   const matchedKeywords = jdKeywords.filter((label) => {
     const entry = keywordCatalog.find(([name]) => name === label);
     return entry ? entry[1].test(resumeText) : false;
@@ -125,7 +126,7 @@ function analyze(baseText: string, resume: TailoredResume, role: ResumeRole, jd:
   const score = Math.max(0, Math.min(100, keywordCoverage + roleEvidence + structure + contact));
   const notes: string[] = [];
   if (missingKeywords.length) {
-    notes.push(`JD keywords not verified in the base resume: ${missingKeywords.slice(0, 8).join(", ")}. Only add them if they are genuinely true.`);
+    notes.push(`JD keywords not verified in the generated resume: ${missingKeywords.slice(0, 8).join(", ")}. Only add them if they are genuinely true.`);
   }
   if (!jdKeywords.length) {
     notes.push("The job description did not contain enough recognized role keywords for a strong JD-specific score.");
@@ -185,8 +186,10 @@ export function tailorResumeForJob(
     ].join("\n"),
   };
 
+  const polished = polishTailoredResume(baseText, tailored);
+
   return {
-    resume: tailored,
-    ats: analyze(baseText, tailored, role, jd),
+    resume: polished,
+    ats: analyze(baseText, polished, role, jd),
   };
 }
