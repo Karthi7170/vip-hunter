@@ -299,7 +299,7 @@
     }
 
     const count = fill(profile, savedResume);
-    if (count) toast(`VIP-Hunter filled ${count} field${count === 1 ? "" : "s"}${savedResume?.name ? " and checked the saved resume" : ""}.`);
+    if (count) toast(`VIP-Hunter filled ${count} field${count === 1 ? "" : "s"}${savedResume?.name ? ` and loaded ${savedResume.name}` : ""}.`);
 
     if (settings.autoSubmit === false || submitAttempted) return;
 
@@ -328,15 +328,46 @@
     monitorSubmission();
   }
 
-  chrome.storage.local.get(["vipHunterProfile", "vipHunterSettings", "vipHunterResume"], ({ vipHunterProfile, vipHunterSettings = {}, vipHunterResume }) => {
-    if (!vipHunterProfile) {
-      toast("VIP-Hunter needs your verified profile in Extension options before Auto Apply can run.", "warn", true);
-      sendResult("action_required", "Extension profile is not configured.");
-      return;
+  function samePreparedJob(targetUrl) {
+    if (!targetUrl) return false;
+    try {
+      const target = new URL(targetUrl);
+      if (target.hostname.toLowerCase() !== location.hostname.toLowerCase()) return false;
+      const targetPath = target.pathname.replace(/\/+$/, "");
+      const currentPath = location.pathname.replace(/\/+$/, "");
+      return currentPath === targetPath || currentPath.startsWith(`${targetPath}/`) || targetPath.startsWith(`${currentPath}/`);
+    } catch {
+      return false;
     }
+  }
 
-    const settings = { autoSubmit: vipHunterSettings.autoSubmit !== false };
-    setTimeout(() => run(vipHunterProfile, settings, vipHunterResume), 900);
-    setTimeout(() => fill(vipHunterProfile, vipHunterResume), 2600);
-  });
+  chrome.storage.local.get(
+    ["vipHunterProfile", "vipHunterSettings", "vipHunterResume", "vipHunterPreparedResume", "vipHunterCurrentJob"],
+    ({ vipHunterProfile, vipHunterSettings = {}, vipHunterResume, vipHunterPreparedResume, vipHunterCurrentJob }) => {
+      if (!vipHunterProfile) {
+        toast("VIP-Hunter needs your verified profile in Extension options before Auto Apply can run.", "warn", true);
+        sendResult("action_required", "Extension profile is not configured.");
+        return;
+      }
+
+      const preparedMatches = vipHunterPreparedResume && samePreparedJob(vipHunterCurrentJob?.url);
+      const selectedResume = preparedMatches ? vipHunterPreparedResume : vipHunterResume;
+
+      if (vipHunterCurrentJob?.url && !preparedMatches) {
+        toast("VIP-Hunter paused because the prepared resume does not match this application URL.", "warn", true);
+        sendResult("action_required", "Prepared resume did not match the active application URL.");
+        return;
+      }
+
+      if (!selectedResume?.base64) {
+        toast("VIP-Hunter could not find a resume for this application.", "warn", true);
+        sendResult("action_required", "No resume is available for this application.");
+        return;
+      }
+
+      const settings = { autoSubmit: vipHunterSettings.autoSubmit !== false };
+      setTimeout(() => run(vipHunterProfile, settings, selectedResume), 900);
+      setTimeout(() => fill(vipHunterProfile, selectedResume), 2600);
+    },
+  );
 })();
