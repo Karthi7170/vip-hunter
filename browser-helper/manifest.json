@@ -1,26 +1,38 @@
 {
   "manifest_version": 3,
   "name": "VIP-Hunter Apply Assistant",
-  "version": "0.1.0",
-  "description": "Autofills common application fields on supported public ATS pages. Never submits forms or bypasses CAPTCHA/OTP.",
-  "permissions": ["storage"],
+  "version": "0.2.0",
+  "description": "Autofills and auto-submits simple supported ATS applications, while stopping for CAPTCHA, OTP, legal declarations, logins, or unknown required fields.",
+  "permissions": ["storage", "tabs"],
   "host_permissions": [
+    "https://vip-hunter.vercel.app/*",
     "https://jobs.lever.co/*",
     "https://boards.greenhouse.io/*",
     "https://job-boards.greenhouse.io/*",
+    "https://job-boards.eu.greenhouse.io/*",
     "https://jobs.smartrecruiters.com/*"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "options_page": "options.html",
   "content_scripts": [
+    {
+      "matches": ["https://vip-hunter.vercel.app/*"],
+      "js": ["dashboard.js"],
+      "run_at": "document_idle"
+    },
     {
       "matches": [
         "https://jobs.lever.co/*",
         "https://boards.greenhouse.io/*",
         "https://job-boards.greenhouse.io/*",
+        "https://job-boards.eu.greenhouse.io/*",
         "https://jobs.smartrecruiters.com/*"
       ],
       "js": ["content.js"],
-      "run_at": "document_idle"
+      "run_at": "document_idle",
+      "all_frames": true
     }
   ]
 }
