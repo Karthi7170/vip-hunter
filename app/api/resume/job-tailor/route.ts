@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import mammoth from "mammoth";
 import pdfParse from "pdf-parse";
 import { createAdminSupabase } from "@/lib/supabase-admin";
-import { filenameForResume, renderResumePdf, type ResumeRole } from "@/lib/resume-generator";
+import { filenameForResume, type ResumeRole } from "@/lib/resume-generator";
+import { renderProfessionalResumePdf } from "@/lib/resume-professional";
 import { tailorResumeForJob } from "@/lib/job-ats";
 
 export const runtime = "nodejs";
@@ -66,7 +67,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { resume, ats } = tailorResumeForJob(baseText, role, jobDescription, jobTitle, company);
-    const pdfBytes = await renderResumePdf(resume);
+    const pdfBytes = await renderProfessionalResumePdf(resume);
     const filename = filenameForResume(resume);
 
     return NextResponse.json({
