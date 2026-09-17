@@ -136,7 +136,7 @@ export default function JobAtsGenerator({ job, onClose }: Props) {
     }
 
     setLoading(true);
-    setStatus(`Using your ${profileLabel(selectedProfile)} resume as the base and tailoring its content to this JD…`);
+    setStatus(`Using your ${profileLabel(selectedProfile)} resume as the base and generating the SKILLS section from this JD while preserving the approved format…`);
 
     try {
       const { data } = await sb.auth.getSession();
@@ -160,7 +160,7 @@ export default function JobAtsGenerator({ job, onClose }: Props) {
       if (pdfUrl) URL.revokeObjectURL(pdfUrl);
       setPdfUrl(toPdfUrl(payload.pdfBase64));
       setResult(payload);
-      setStatus(`${profileLabel(selectedProfile)} base selected · JD-tailored content ready · ATS match ${payload.ats.score}/100.`);
+      setStatus(`${profileLabel(selectedProfile)} base selected · JD-first skills generated in the same resume format · ATS match ${payload.ats.score}/100.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "ATS resume generation failed.");
     } finally {
@@ -180,7 +180,7 @@ export default function JobAtsGenerator({ job, onClose }: Props) {
       </div>
 
       <div className={styles.explain}>
-        First VIP-Hunter selects the correct role-specific base resume. Then it analyses this job description and tailors that resume's summary, verified skill priority, experience bullets and project priority. The approved resume format stays unchanged.
+        VIP-Hunter keeps your approved one-page format, section order and alignment unchanged. For each job, the SKILLS section is generated from the JD requirements first, using the same fixed six-skill layout. Summary, experience and project claims continue to use your selected base resume as their factual source.
       </div>
 
       <div className={styles.profileBox}>
@@ -252,10 +252,10 @@ export default function JobAtsGenerator({ job, onClose }: Props) {
             </a>
           )}
           {result.ats.matchedKeywords.length > 0 && (
-            <div className={styles.keywords}><b>Matched JD keywords</b><p>{result.ats.matchedKeywords.join(" · ")}</p></div>
+            <div className={styles.keywords}><b>JD keywords in generated resume</b><p>{result.ats.matchedKeywords.join(" · ")}</p></div>
           )}
           {result.ats.missingKeywords.length > 0 && (
-            <div className={styles.missing}><b>JD requirements not present in the selected base resume</b><p>{result.ats.missingKeywords.join(" · ")}</p><small>They are not inserted automatically. Use a different role resume only if it genuinely contains those skills.</small></div>
+            <div className={styles.missing}><b>JD-derived skills added for review</b><p>{result.ats.missingKeywords.join(" · ")}</p><small>These requirements were taken from the JD because they were not found in the selected base resume. Review them for accuracy before using the resume.</small></div>
           )}
         </div>
       )}
