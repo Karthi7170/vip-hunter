@@ -1,9 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Download, FileText, LoaderCircle, Sparkles, UploadCloud, X } from "lucide-react";
 import type { Job } from "@/lib/jobs";
 import { createBrowserSupabase } from "@/lib/supabase-browser";
+import {
+  loadResumeProfile,
+  saveResumeProfile,
+  type ResumeProfile,
+} from "@/lib/resume-bank-client";
 import styles from "./JobAtsGenerator.module.css";
 
 type Props = {
@@ -30,10 +35,20 @@ type GenerateResponse = {
   error?: string;
 };
 
-function roleForJob(job: Job) {
+const resumeProfiles: Array<{ value: ResumeProfile; label: string }> = [
+  { value: "manual-testing", label: "Manual Testing / QA" },
+  { value: "software-developer", label: "Software Developer" },
+  { value: "technical-support", label: "Technical Support" },
+];
+
+function roleForJob(job: Job): ResumeProfile {
   if (job.type === "Developer") return "software-developer";
   if (job.type === "System") return "technical-support";
   return "manual-testing";
+}
+
+function profileLabel(profile: ResumeProfile) {
+  return resumeProfiles.find((item) => item.value === profile)?.label || "Resume";
 }
 
 function toPdfUrl(base64: string) {
@@ -45,20 +60,74 @@ function toPdfUrl(base64: string) {
 
 export default function JobAtsGenerator({ job, onClose }: Props) {
   const sb = useMemo(() => createBrowserSupabase(), []);
+  const recommendedProfile = useMemo(() => roleForJob(job), [job]);
+  const [selectedProfile, setSelectedProfile] = useState<ResumeProfile>(recommendedProfile);
   const [file, setFile] = useState<File | null>(null);
   const [jd, setJd] = useState(job.jobDescription || "");
   const [loading, setLoading] = useState(false);
+  const [resumeLoading, setResumeLoading] = useState(true);
   const [status, setStatus] = useState(
     job.jobDescription
-      ? "Job description loaded automatically. Upload your base resume; its original format will be preserved."
+      ? "Job description loaded automatically. VIP-Hunter is selecting the correct role resume."
       : "This older job does not include the full JD. Paste the job description from the application page.",
   );
   const [result, setResult] = useState<GenerateResponse | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
 
+  useEffect(() => {
+    let active = true;
+    setResumeLoading(true);
+    setFile(null);
+    setResult(null);
+
+    loadResumeProfile(selectedProfile)
+      .then((saved) => {
+        if (!active) return;
+        setFile(saved);
+        if (saved) {
+          setStatus(`${profileLabel(selectedProfile)} base resume selected automatically: ${saved.name}`);
+        } else {
+          setStatus(`Upload your ${profileLabel(selectedProfile)} base resume once. VIP-Hunter will remember it on this device and reuse it for matching jobs.`);
+        }
+      })
+      .catch(() => {
+        if (!active) return;
+        setStatus(`Upload your ${profileLabel(selectedProfile)} base resume to continue.`);
+      })
+      .finally(() => {
+        if (active) setResumeLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [selectedProfile]);
+
+  useEffect(() => {
+    return () => {
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+    };
+  }, [pdfUrl]);
+
+  async function chooseResume(nextFile: File | null) {
+    setResult(null);
+    if (!nextFile) {
+      setFile(null);
+      return;
+    }
+
+    setFile(nextFile);
+    try {
+      await saveResumeProfile(selectedProfile, nextFile);
+      setStatus(`${profileLabel(selectedProfile)} base resume saved. This resume will be selected automatically for matching jobs.`);
+    } catch {
+      setStatus(`${nextFile.name} selected for this job. Your browser could not save it for future use.`);
+    }
+  }
+
   async function generate() {
     if (!file) {
-      setStatus("Upload your base resume first.");
+      setStatus(`Upload your ${profileLabel(selectedProfile)} base resume first.`);
       return;
     }
     if (jd.trim().length < 80) {
@@ -67,7 +136,7 @@ export default function JobAtsGenerator({ job, onClose }: Props) {
     }
 
     setLoading(true);
-    setStatus("Analysing the JD and updating only JD-relevant content inside your original resume format…");
+    setStatus(`Using your ${profileLabel(selectedProfile)} resume as the base and tailoring its content to this JD…`);
 
     try {
       const { data } = await sb.auth.getSession();
@@ -75,7 +144,7 @@ export default function JobAtsGenerator({ job, onClose }: Props) {
 
       const form = new FormData();
       form.append("resume", file);
-      form.append("role", roleForJob(job));
+      form.append("role", selectedProfile);
       form.append("jobDescription", jd.trim());
       form.append("jobTitle", job.role);
       form.append("company", job.company);
@@ -91,7 +160,7 @@ export default function JobAtsGenerator({ job, onClose }: Props) {
       if (pdfUrl) URL.revokeObjectURL(pdfUrl);
       setPdfUrl(toPdfUrl(payload.pdfBase64));
       setResult(payload);
-      setStatus(`Original format preserved · JD-tailored content ready · ATS match ${payload.ats.score}/100.`);
+      setStatus(`${profileLabel(selectedProfile)} base selected · JD-tailored content ready · ATS match ${payload.ats.score}/100.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "ATS resume generation failed.");
     } finally {
@@ -111,7 +180,23 @@ export default function JobAtsGenerator({ job, onClose }: Props) {
       </div>
 
       <div className={styles.explain}>
-        Your uploaded resume template is locked: same one-page structure, section order and alignment. VIP-Hunter only updates JD-relevant summary, skill priority, experience bullet priority and project priority using facts already present in your base resume. It never invents a skill or experience to raise the score.
+        First VIP-Hunter selects the correct role-specific base resume. Then it analyses this job description and tailors that resume's summary, verified skill priority, experience bullets and project priority. The approved resume format stays unchanged.
+      </div>
+
+      <div className={styles.profileBox}>
+        <div>
+          <b>Base resume profile</b>
+          <small>Auto-selected from this job: {profileLabel(recommendedProfile)}</small>
+        </div>
+        <select
+          value={selectedProfile}
+          onChange={(event) => setSelectedProfile(event.target.value as ResumeProfile)}
+          disabled={loading}
+        >
+          {resumeProfiles.map((profile) => (
+            <option key={profile.value} value={profile.value}>{profile.label}</option>
+          ))}
+        </select>
       </div>
 
       <label className={styles.jdLabel}>
@@ -130,19 +215,23 @@ export default function JobAtsGenerator({ job, onClose }: Props) {
       <div className={styles.actions}>
         <label className={styles.upload}>
           <UploadCloud size={18} />
-          <span>{file ? file.name : "Upload base resume"}</span>
+          <span>
+            {resumeLoading
+              ? "Checking saved resume…"
+              : file
+                ? `${profileLabel(selectedProfile)}: ${file.name}`
+                : `Upload ${profileLabel(selectedProfile)} resume`}
+          </span>
           <input
             type="file"
             accept="application/pdf,.pdf,.docx,text/plain,.txt"
-            onChange={(event) => {
-              setFile(event.target.files?.[0] || null);
-              setResult(null);
-            }}
+            disabled={resumeLoading || loading}
+            onChange={(event) => void chooseResume(event.target.files?.[0] || null)}
           />
         </label>
-        <button type="button" className={styles.generate} onClick={generate} disabled={loading || !file}>
+        <button className={styles.generate} type="button" onClick={generate} disabled={loading || resumeLoading || !file}>
           {loading ? <LoaderCircle className={styles.spin} size={17} /> : <FileText size={17} />}
-          {loading ? "Tailoring…" : "Analyse JD + Generate"}
+          {loading ? "Tailoring…" : "Tailor selected resume"}
         </button>
       </div>
 
@@ -166,7 +255,7 @@ export default function JobAtsGenerator({ job, onClose }: Props) {
             <div className={styles.keywords}><b>Matched JD keywords</b><p>{result.ats.matchedKeywords.join(" · ")}</p></div>
           )}
           {result.ats.missingKeywords.length > 0 && (
-            <div className={styles.missing}><b>Missing / unverified JD keywords</b><p>{result.ats.missingKeywords.join(" · ")}</p><small>Do not add these unless they are genuinely true.</small></div>
+            <div className={styles.missing}><b>JD requirements not present in the selected base resume</b><p>{result.ats.missingKeywords.join(" · ")}</p><small>They are not inserted automatically. Use a different role resume only if it genuinely contains those skills.</small></div>
           )}
         </div>
       )}
