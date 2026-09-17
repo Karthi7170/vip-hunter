@@ -216,14 +216,9 @@
     const blockers = [];
 
     const bodyText = norm((document.body?.innerText || "").slice(0, 30000));
-    if (document.querySelector('iframe[src*="recaptcha"], iframe[src*="hcaptcha"], .g-recaptcha, .h-captcha, [id*="captcha" i], [class*="captcha" i]') || /\bcaptcha\b/.test(bodyText)) {
-      blockers.push("CAPTCHA detected");
-    }
+    if (document.querySelector('iframe[src*="recaptcha"], iframe[src*="hcaptcha"], .g-recaptcha, .h-captcha, [id*="captcha" i], [class*="captcha" i]') || /\bcaptcha\b/.test(bodyText)) blockers.push("CAPTCHA detected");
 
-    if (document.querySelector('input[type="password"]') && [...document.querySelectorAll('input[type="password"]')].some(visible)) {
-      blockers.push("login/password required");
-    }
-
+    if (document.querySelector('input[type="password"]') && [...document.querySelectorAll('input[type="password"]')].some(visible)) blockers.push("login/password required");
     if (/one time password|verification code|enter otp|\botp\b/.test(bodyText)) blockers.push("OTP/verification required");
 
     const required = [...document.querySelectorAll("input[required], textarea[required], select[required], [aria-required='true']")].filter(visible);
@@ -268,8 +263,11 @@
 
   function sendResult(status, reason) {
     if (resultSent && status !== "submitted") return;
-    resultSent = status === "submitted" || resultSent;
-    chrome.runtime.sendMessage({ type: "VIP_APPLY_RESULT", status, reason }).catch?.(() => {});
+    if (status === "submitted") resultSent = true;
+    try {
+      const pending = chrome.runtime.sendMessage({ type: "VIP_APPLY_RESULT", status, reason });
+      if (pending && typeof pending.catch === "function") pending.catch(() => {});
+    } catch {}
   }
 
   async function monitorSubmission() {
