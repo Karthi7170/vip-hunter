@@ -5,6 +5,7 @@ let activeTabId = null;
 let pausedTabId = null;
 let running = false;
 let lastReason = "";
+const processedTabs = new Set();
 
 async function broadcast(state, reason = "") {
   lastReason = reason || lastReason;
@@ -19,7 +20,8 @@ async function broadcast(state, reason = "") {
 
   const tabs = await chrome.tabs.query({ url: "https://vip-hunter.vercel.app/*" });
   for (const tab of tabs) {
-    if (tab.id) chrome.tabs.sendMessage(tab.id, payload).catch(() => {});
+    if (!tab.id) continue;
+    try { await chrome.tabs.sendMessage(tab.id, payload); } catch {}
   }
 }
 
@@ -38,20 +40,17 @@ async function openNext() {
   await broadcast("running", "Opening the next supported ATS application…");
 }
 
-async function finishTab(tabId, success, reason = "") {
-  if (success) completed += 1;
+async function finishTab(tabId, reason = "") {
+  if (!tabId || processedTabs.has(tabId)) return;
+  processedTabs.add(tabId);
+  completed += 1;
 
-  if (tabId) {
-    try { await chrome.tabs.remove(tabId); } catch {}
-  }
-
+  try { await chrome.tabs.remove(tabId); } catch {}
   if (tabId === activeTabId) activeTabId = null;
   if (tabId === pausedTabId) pausedTabId = null;
 
-  if (success) {
-    await broadcast("running", reason || "Application submitted. Moving to the next job…");
-    await openNext();
-  }
+  await broadcast("running", reason || "Application submitted. Moving to the next job…");
+  await openNext();
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -65,6 +64,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       pausedTabId = null;
       running = urls.length > 0;
       lastReason = "";
+      processedTabs.clear();
       await broadcast(urls.length ? "running" : "idle", urls.length ? "Auto-apply queue started." : "No supported 75%+ jobs found on this page.");
       await openNext();
       sendResponse({ ok: true, total });
@@ -74,8 +74,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message?.type === "VIP_APPLY_RESULT") {
       const tabId = sender.tab?.id || null;
       if (message.status === "submitted") {
-        await finishTab(tabId, true, message.reason || "Application submitted.");
-      } else if (message.status === "action_required") {
+        await finishTab(tabId, message.reason || "Application submitted.");
+      } else if (message.status === "action_required" && tabId && !processedTabs.has(tabId)) {
         if (tabId === activeTabId) activeTabId = null;
         pausedTabId = tabId;
         running = true;
@@ -90,6 +90,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       pausedTabId = null;
       activeTabId = null;
       if (tabId) {
+        processedTabs.add(tabId);
         try { await chrome.tabs.remove(tabId); } catch {}
       }
       await broadcast("running", "Skipped the blocked application. Moving to the next job…");
@@ -101,10 +102,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message?.type === "VIP_STOP_QUEUE") {
       queue = [];
       running = false;
-      const tabId = activeTabId;
+      const tabIds = [activeTabId, pausedTabId].filter(Boolean);
       activeTabId = null;
       pausedTabId = null;
-      if (tabId) {
+      for (const tabId of tabIds) {
         try { await chrome.tabs.remove(tabId); } catch {}
       }
       await broadcast("stopped", "Auto-apply queue stopped.");
