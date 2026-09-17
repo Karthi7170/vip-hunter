@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findLiveJobs } from "@/lib/find-jobs";
+import { findLiveJobs } from "@/lib/find-jobs-7d";
 import { persistJobs } from "@/lib/persist-jobs";
 import { createAdminSupabase } from "@/lib/supabase-admin";
 
@@ -28,6 +28,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       jobs,
       persisted: persisted.count,
+      windowDays: 7,
       updatedAt: new Date().toISOString(),
     });
   } catch (error) {
