@@ -4,11 +4,11 @@ import pdfParse from "pdf-parse";
 import { createAdminSupabase } from "@/lib/supabase-admin";
 import {
   filenameForResume,
-  renderResumePdf,
   tailorResume,
   type ResumeRole,
   type TailoredResume,
 } from "@/lib/resume-generator";
+import { polishTailoredResume, renderProfessionalResumePdf } from "@/lib/resume-professional";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -349,9 +349,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const resume = tailorResume(text, role);
+    const rawResume = tailorResume(text, role);
+    const resume = polishTailoredResume(text, rawResume);
     const atsScore = calculateAtsScore(resume, role, jobDescription);
-    const pdfBytes = await renderResumePdf(resume);
+    const pdfBytes = await renderProfessionalResumePdf(resume);
     const filename = filenameForResume(resume);
 
     return NextResponse.json({
