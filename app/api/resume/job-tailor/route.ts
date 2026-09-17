@@ -3,7 +3,7 @@ import mammoth from "mammoth";
 import pdfParse from "pdf-parse";
 import { createAdminSupabase } from "@/lib/supabase-admin";
 import { filenameForResume, type ResumeRole } from "@/lib/resume-generator";
-import { renderProfessionalResumePdf } from "@/lib/resume-professional";
+import { renderOriginalResumeTemplate } from "@/lib/original-resume-template";
 import { tailorResumeForJob } from "@/lib/job-ats";
 
 export const runtime = "nodejs";
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { resume, ats } = tailorResumeForJob(baseText, role, jobDescription, jobTitle, company);
-    const pdfBytes = await renderProfessionalResumePdf(resume);
+    const pdfBytes = await renderOriginalResumeTemplate(resume, baseText);
     const filename = filenameForResume(resume);
 
     return NextResponse.json({
@@ -79,7 +79,8 @@ export async function POST(request: NextRequest) {
       jobTitle,
       company,
       generatedAt: new Date().toISOString(),
-      disclaimer: "VIP-Hunter's ATS score is an explainable resume-to-job-description compatibility score, not a score returned by an employer's ATS vendor.",
+      templateMode: "original-base-resume",
+      disclaimer: "VIP-Hunter preserves the original base-resume structure and changes only JD-relevant content that is supported by the uploaded resume. The ATS score is an explainable resume-to-job-description compatibility score, not a score returned by an employer's ATS vendor.",
     });
   } catch (error) {
     return NextResponse.json(
