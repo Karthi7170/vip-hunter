@@ -66,20 +66,20 @@ export default function ExternalJobSearch() {
     return [
       {
         name: "LinkedIn Jobs",
-        href: `https://www.linkedin.com/jobs/search/?keywords=${q}&location=${loc}&f_TPR=r86400&f_E=2&sortBy=DD`,
-        freshness: "Past 24 hours",
+        href: `https://www.linkedin.com/jobs/search/?keywords=${q}&location=${loc}&f_TPR=r604800&f_E=2&sortBy=DD`,
+        freshness: "Past 7 days",
         note: "Entry-level filter included",
       },
       {
         name: "Naukri",
-        href: `https://www.naukri.com/${naukriRole}-jobs-in-${naukriLocation}?k=${q}&l=${encodeURIComponent(locationData.label)}&experience=0`,
-        freshness: "Fresher search",
+        href: `https://www.naukri.com/${naukriRole}-jobs-in-${naukriLocation}?k=${q}&l=${encodeURIComponent(locationData.label)}&experience=0&jobAge=7`,
+        freshness: "Past 7 days",
         note: "0-year experience target",
       },
       {
         name: "Indeed",
-        href: `https://in.indeed.com/jobs?q=${q}&l=${loc}&fromage=1&sort=date`,
-        freshness: "Past 24 hours",
+        href: `https://in.indeed.com/jobs?q=${q}&l=${loc}&fromage=7&sort=date`,
+        freshness: "Past 7 days",
         note: "Newest results first",
       },
     ];
