@@ -5,25 +5,55 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>VIP-Hunter Apply Assistant</title>
   <style>
-    body{font-family:Inter,system-ui,sans-serif;background:#f4f7f5;color:#102018;margin:0;padding:32px}.wrap{max-width:720px;margin:auto;background:#fff;border:1px solid #dfe7e2;border-radius:20px;padding:24px;box-shadow:0 12px 40px #173e2c12}h1{margin:0 0 8px;font-size:28px}p{color:#64746b;line-height:1.55}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:20px}label{display:grid;gap:6px;font-size:12px;font-weight:800;color:#34443c}input,textarea{font:inherit;border:1px solid #cedbd4;border-radius:10px;padding:11px;background:#fff}textarea{min-height:90px;resize:vertical}.wide{grid-column:1/-1}button{margin-top:18px;border:0;border-radius:10px;background:#153c2b;color:#fff;padding:11px 16px;font-weight:800;cursor:pointer}.note{font-size:12px;background:#f5faf7;border:1px solid #d9e8df;padding:12px;border-radius:10px}.ok{margin-left:10px;color:#267448;font-size:12px}@media(max-width:620px){.grid{grid-template-columns:1fr}.wide{grid-column:auto}}
+    body{font-family:Inter,system-ui,sans-serif;background:#f4f7f5;color:#102018;margin:0;padding:32px}.wrap{max-width:820px;margin:auto;background:#fff;border:1px solid #dfe7e2;border-radius:20px;padding:24px;box-shadow:0 12px 40px #173e2c12}h1{margin:0 0 8px;font-size:28px}h2{font-size:17px;margin:28px 0 8px}p{color:#64746b;line-height:1.55}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:20px}label{display:grid;gap:6px;font-size:12px;font-weight:800;color:#34443c}input,textarea,select{font:inherit;border:1px solid #cedbd4;border-radius:10px;padding:11px;background:#fff}textarea{min-height:90px;resize:vertical}.wide{grid-column:1/-1}.toggle{display:flex;align-items:flex-start;gap:10px;background:#ecf9f1;border:1px solid #cfe9d9;border-radius:12px;padding:14px;margin-top:18px}.toggle input{width:18px;height:18px;margin-top:2px}.toggle span{font-size:13px;line-height:1.45}.toggle b{display:block;color:#153c2b;margin-bottom:2px}button{margin-top:18px;border:0;border-radius:10px;background:#153c2b;color:#fff;padding:11px 16px;font-weight:800;cursor:pointer}.note{font-size:12px;background:#fff8e8;border:1px solid #f0dfb4;padding:12px;border-radius:10px}.ok{margin-left:10px;color:#267448;font-size:12px}.resume{background:#f5faf7;border:1px solid #d9e8df;border-radius:12px;padding:14px;margin-top:12px}.resume small{display:block;color:#708078;margin-top:6px}.danger{color:#9a3d2d}@media(max-width:620px){.grid{grid-template-columns:1fr}.wide{grid-column:auto}}
   </style>
 </head>
 <body>
   <div class="wrap">
     <h1>VIP-Hunter Apply Assistant</h1>
-    <p>Save your verified profile once. The extension uses it only to fill common fields on supported ATS pages in your browser.</p>
-    <div class="note">The helper does not submit applications, solve CAPTCHA/OTP, sign in to sites, or invent answers. Review every field before submitting.</div>
+    <p>Save only verified application details. The extension can fill and automatically submit simple applications on supported public ATS pages.</p>
+    <div class="note"><b>Guardrails:</b> auto-apply stops for CAPTCHA, OTP, login walls, legal/consent declarations, demographic/EEO questions, assessments, or required fields it cannot answer safely. LinkedIn, Naukri and Indeed are not automated by this extension.</div>
+
+    <label class="toggle">
+      <input id="autoSubmit" type="checkbox" checked />
+      <span><b>Enable Auto Apply</b>When a supported application is fully completed from your saved profile, VIP-Hunter may click the final submit button automatically. Turn this off any time if you want review-only mode.</span>
+    </label>
+
+    <h2>Verified profile</h2>
     <div class="grid">
       <label>Full name<input id="fullName" autocomplete="name" /></label>
       <label>Email<input id="email" type="email" autocomplete="email" /></label>
       <label>Phone<input id="phone" autocomplete="tel" /></label>
       <label>City<input id="city" /></label>
+      <label>Country<input id="country" placeholder="Example: India" /></label>
+      <label>Years of professional experience<input id="yearsExperience" placeholder="Example: 0.5" /></label>
       <label>LinkedIn URL<input id="linkedin" type="url" /></label>
       <label>Portfolio URL<input id="portfolio" type="url" /></label>
       <label class="wide">Current / latest job title<input id="currentTitle" /></label>
       <label class="wide">Education summary<textarea id="education" placeholder="Example: MCA, SRM University Chennai, 2023–2025"></textarea></label>
     </div>
-    <button id="save">Save profile</button><span class="ok" id="status"></span>
+
+    <h2>Common application answers</h2>
+    <p>Leave anything blank if you have not decided or verified the answer. VIP-Hunter will stop instead of guessing.</p>
+    <div class="grid">
+      <label>Authorized to work in India?
+        <select id="workAuthorization"><option value="">Not set</option><option>Yes</option><option>No</option></select>
+      </label>
+      <label>Need employer sponsorship?
+        <select id="sponsorship"><option value="">Not set</option><option>Yes</option><option>No</option></select>
+      </label>
+      <label>Notice period<input id="noticePeriod" placeholder="Example: Immediate" /></label>
+      <label>Expected salary<input id="expectedSalary" placeholder="Example: 3–4 LPA" /></label>
+    </div>
+
+    <h2>Resume</h2>
+    <div class="resume">
+      <label>Resume PDF<input id="resume" type="file" accept="application/pdf,.pdf" /></label>
+      <small id="resumeStatus">No resume stored in the extension yet.</small>
+      <small>Choose the resume once. It is stored locally in this browser extension and used only on supported ATS application forms. Maximum 5 MB.</small>
+    </div>
+
+    <button id="save">Save Auto Apply profile</button><span class="ok" id="status"></span>
   </div>
   <script src="options.js"></script>
 </body>
