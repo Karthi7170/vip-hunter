@@ -6,6 +6,7 @@ import {
   LoaderCircle,
   Play,
   ShieldCheck,
+  Smartphone,
   Sparkles,
   TriangleAlert,
 } from "lucide-react";
@@ -75,14 +76,47 @@ function estimatedBase64Bytes(base64: string) {
   return Math.max(0, Math.floor((base64.length * 3) / 4));
 }
 
+function base64PdfUrl(base64: string) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+}
+
+function savePdfForMobile(base64: string, filename: string) {
+  const url = base64PdfUrl(base64);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename || "VIP-Hunter-tailored-resume.pdf";
+  anchor.rel = "noopener";
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+function detectMobileApplyMode() {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  const iPadDesktopMode = /Macintosh/i.test(ua) && navigator.maxTouchPoints > 1;
+  return /iPhone|iPad|iPod|Android/i.test(ua) || iPadDesktopMode;
+}
+
 export default function AutoApplyQueue() {
   const sb = useMemo(() => createBrowserSupabase(), []);
   const [jobs, setJobs] = useState<QueueJob[]>([]);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [preparing, setPreparing] = useState(false);
+  const [mobileJobId, setMobileJobId] = useState<string | null>(null);
+  const [mobileMode, setMobileMode] = useState(false);
   const [extensionReady, setExtensionReady] = useState(false);
   const [message, setMessage] = useState("Preparing queue…");
+
+  useEffect(() => {
+    setMobileMode(detectMobileApplyMode());
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -156,6 +190,8 @@ export default function AutoApplyQueue() {
   }, [sb]);
 
   useEffect(() => {
+    if (mobileMode) return;
+
     function onMessage(event: MessageEvent) {
       if (event.source !== window || event.data?.source !== "VIP_HUNTER_EXTENSION") return;
 
@@ -210,12 +246,12 @@ export default function AutoApplyQueue() {
     window.postMessage({ source: "VIP_HUNTER_WEB", type: "VIP_EXTENSION_PING" }, window.location.origin);
     return () => window.removeEventListener("message", onMessage);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profileId, sb, jobs]);
+  }, [profileId, sb, jobs, mobileMode]);
 
   async function prepareAndAutoApply(singleJob?: QueueJob) {
-    if (preparing) return;
+    if (preparing || mobileMode) return;
     if (!extensionReady) {
-      setMessage("Auto Apply requires the VIP-Hunter Chrome/Edge browser helper on desktop. Tailored resume generation still works from each job card.");
+      setMessage("Desktop Auto Apply requires the VIP-Hunter Chrome/Edge browser helper. Install or reload the helper, then try again.");
       return;
     }
 
@@ -315,7 +351,99 @@ export default function AutoApplyQueue() {
     }
   }
 
+  async function tailorAndOpenMobile(job: QueueJob) {
+    if (mobileJobId) return;
+
+    if (job.jobDescription.length < 80) {
+      window.open(job.applyUrl, "_blank", "noopener,noreferrer");
+      setMessage(`${job.company} application opened. This job did not include enough JD text for automatic tailoring.`);
+      if (profileId) {
+        await sb.from("applications").upsert(
+          {
+            user_id: profileId,
+            job_id: job.jobId,
+            status: "action_required",
+            notes: "Opened on mobile without automatic tailoring because the stored job did not include a complete JD.",
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id,job_id" },
+        );
+      }
+      return;
+    }
+
+    const applicationWindow = window.open("about:blank", "_blank");
+    setMobileJobId(job.jobId);
+    setMessage(`Tailoring your ${profileLabel(job.resumeProfile)} resume for ${job.company}…`);
+
+    try {
+      const baseResume = await loadResumeProfile(job.resumeProfile);
+      if (!baseResume) {
+        applicationWindow?.close();
+        throw new Error(`Upload your ${profileLabel(job.resumeProfile)} base resume first from the ATS Resume tool.`);
+      }
+
+      const { data: auth } = await sb.auth.getSession();
+      const token = auth.session?.access_token;
+      if (!token) {
+        applicationWindow?.close();
+        throw new Error("Your session expired. Sign in again.");
+      }
+
+      const form = new FormData();
+      form.append("resume", baseResume);
+      form.append("role", job.resumeProfile);
+      form.append("jobDescription", job.jobDescription);
+      form.append("jobTitle", job.title);
+      form.append("company", job.company);
+
+      const response = await fetch("/api/resume/job-tailor", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload?.pdfBase64) {
+        applicationWindow?.close();
+        throw new Error(payload?.error || "Could not generate the JD-tailored resume.");
+      }
+
+      const filename = payload.filename || `${job.resumeProfile}-tailored.pdf`;
+      savePdfForMobile(payload.pdfBase64, filename);
+
+      if (applicationWindow && !applicationWindow.closed) {
+        applicationWindow.location.href = job.applyUrl;
+      } else {
+        window.open(job.applyUrl, "_blank", "noopener,noreferrer");
+      }
+
+      setMessage(`Tailored resume saved for ${job.company} · ATS match ${Number(payload.ats?.score || 0)}/100. The application is open—upload the PDF you just saved.`);
+
+      if (profileId) {
+        await sb.from("applications").upsert(
+          {
+            user_id: profileId,
+            job_id: job.jobId,
+            status: "action_required",
+            notes: `Mobile flow prepared a JD-tailored ${profileLabel(job.resumeProfile)} PDF (ATS match ${Number(payload.ats?.score || 0)}/100) and opened the employer application for manual upload/submission.`,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id,job_id" },
+        );
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not prepare the mobile application.");
+    } finally {
+      setMobileJobId(null);
+    }
+  }
+
   async function launch(job: QueueJob) {
+    if (mobileMode) {
+      await tailorAndOpenMobile(job);
+      return;
+    }
+
     if (job.supported && job.jobDescription.length >= 80) {
       await prepareAndAutoApply(job);
       return;
@@ -348,30 +476,42 @@ export default function AutoApplyQueue() {
         <div className={styles.header}>
           <div>
             <span className={styles.eyebrow}><Sparkles size={14} /> AI-MAD Apply Assistant</span>
-            <h2>JD-tailored auto apply</h2>
+            <h2>{mobileMode ? "JD-tailored mobile apply" : "JD-tailored auto apply"}</h2>
             <p>{message}</p>
           </div>
-          <button
-            className={styles.batchButton}
-            type="button"
-            onClick={() => void prepareAndAutoApply()}
-            disabled={preparing || !autoReadyCount}
-          >
-            {preparing ? <LoaderCircle className={styles.spin} size={16} /> : <Play size={16} />}
-            {preparing ? "Preparing resumes…" : `Tailor + Auto Apply (${autoReadyCount})`}
-          </button>
+          {mobileMode ? (
+            <span className={styles.mobileBadge}><Smartphone size={15} /> iPhone / mobile mode</span>
+          ) : (
+            <button
+              className={styles.batchButton}
+              type="button"
+              onClick={() => void prepareAndAutoApply()}
+              disabled={preparing || !autoReadyCount}
+            >
+              {preparing ? <LoaderCircle className={styles.spin} size={16} /> : <Play size={16} />}
+              {preparing ? "Preparing resumes…" : `Tailor + Auto Apply (${autoReadyCount})`}
+            </button>
+          )}
         </div>
 
         <div className={styles.notice}>
           <ShieldCheck size={17} />
           <span>
-            For each supported job, VIP-Hunter reads the JD, selects the matching role-specific base resume, generates a JD-tailored PDF, uploads that exact PDF to the employer ATS, fills only verified answers, and can submit when the form is complete. It pauses for CAPTCHA, OTP/login, legal declarations, assessments, or unknown required fields.
+            {mobileMode
+              ? "For each job, VIP-Hunter reads the JD, selects the matching role resume, generates the tailored PDF and opens the employer application. On iPhone, upload the saved PDF in the application form and submit manually."
+              : "For each supported job, VIP-Hunter reads the JD, selects the matching role-specific base resume, generates a JD-tailored PDF, uploads that exact PDF to the employer ATS, fills only verified answers, and can submit when the form is complete. It pauses for CAPTCHA, OTP/login, legal declarations, assessments, or unknown required fields."}
           </span>
         </div>
 
-        {!extensionReady && (
+        {!mobileMode && !extensionReady && (
           <div className={styles.helperNotice}>
-            Desktop Auto Apply needs the VIP-Hunter Chrome/Edge browser helper. On iPhone, applications remain manual after resume tailoring.
+            Desktop Auto Apply needs the VIP-Hunter Chrome/Edge browser helper. Install or reload the helper to enable automatic form filling and resume upload.
+          </div>
+        )}
+
+        {mobileMode && (
+          <div className={styles.mobileNotice}>
+            Tap <b>Tailor Resume → Open</b>. VIP-Hunter saves the JD-specific PDF first, then opens the employer application so you can upload that exact resume.
           </div>
         )}
 
@@ -379,6 +519,7 @@ export default function AutoApplyQueue() {
           <div className={styles.queue}>
             {jobs.map((job) => {
               const jdReady = job.jobDescription.length >= 80;
+              const mobileLoading = mobileJobId === job.jobId;
               return (
                 <article key={job.jobId} className={styles.card}>
                   <div className={styles.score}>{job.score}%</div>
@@ -388,12 +529,29 @@ export default function AutoApplyQueue() {
                     <small>{job.source} · {profileLabel(job.resumeProfile)} resume · {jdReady ? "JD ready" : "JD missing"}</small>
                   </div>
                   <div className={styles.actions}>
-                    <span className={job.supported && jdReady ? styles.supported : styles.manual}>
-                      {job.supported && jdReady ? "Tailored auto apply" : job.supported ? "Needs JD" : "Manual form"}
+                    <span className={(mobileMode && jdReady) || (job.supported && jdReady) ? styles.supported : styles.manual}>
+                      {mobileMode
+                        ? jdReady ? "Mobile tailor ready" : "JD unavailable"
+                        : job.supported && jdReady ? "Tailored auto apply" : job.supported ? "Needs JD" : "Manual form"}
                     </span>
-                    <button onClick={() => void launch(job)} disabled={preparing && job.supported}>
-                      {job.supported && jdReady ? <Play size={15} /> : <ExternalLink size={15} />}
-                      {job.supported && jdReady ? "Tailor + apply" : "Open application"}
+                    <button
+                      onClick={() => void launch(job)}
+                      disabled={(preparing && job.supported) || Boolean(mobileJobId)}
+                    >
+                      {mobileLoading ? (
+                        <LoaderCircle className={styles.spin} size={15} />
+                      ) : mobileMode ? (
+                        jdReady ? <Smartphone size={15} /> : <ExternalLink size={15} />
+                      ) : job.supported && jdReady ? (
+                        <Play size={15} />
+                      ) : (
+                        <ExternalLink size={15} />
+                      )}
+                      {mobileLoading
+                        ? "Tailoring…"
+                        : mobileMode
+                          ? jdReady ? "Tailor Resume → Open" : "Open application"
+                          : job.supported && jdReady ? "Tailor + apply" : "Open application"}
                     </button>
                   </div>
                 </article>
