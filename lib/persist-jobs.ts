@@ -17,7 +17,7 @@ export async function persistJobs(jobs: Job[], profileId?: string) {
     title: job.role,
     location: job.location,
     work_mode: job.mode,
-    description: job.whyFit,
+    description: job.jobDescription || job.whyFit,
     skills: [...new Set([...(job.matchedSkills || []), ...(job.requirements || [])])],
     apply_url: job.applyUrl,
     posted_at: job.posted ? new Date(job.posted).toISOString() : null,
