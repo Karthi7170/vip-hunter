@@ -152,7 +152,7 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
           .eq("user_id", profile.id)
           .eq("eligible", true)
           .order("match_score", { ascending: false })
-          .limit(50),
+          .limit(200),
         sb.from("saved_jobs").select("job_id").eq("user_id", profile.id),
         sb.from("applications").select("job_id,status").eq("user_id", profile.id),
       ]);
@@ -165,7 +165,7 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
       setApps(
         Object.fromEntries((applications.data || []).map((row: any) => [row.job_id, row.status])),
       );
-      setStatus(`${matches.data?.length || 0} database matches loaded`);
+      setStatus(`${matches.data?.length || 0} saved statewide matches loaded`);
     })();
   }, [userId, sb]);
 
@@ -280,7 +280,7 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
 
   async function refresh() {
     setLoading(true);
-    setStatus("Searching jobs posted in the last 24 hours…");
+    setStatus("Searching the past 7 days across Tamil Nadu, Kerala and Bengaluru…");
 
     try {
       const {
@@ -302,7 +302,7 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
       if (!response.ok) throw new Error(data.error || "Search failed");
 
       setJobs(data.jobs);
-      setStatus(`${data.jobs.length} fresh matches found`);
+      setStatus(`${data.jobs.length} eligible matches found across Tamil Nadu, Kerala and Bengaluru`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Search failed");
     } finally {
@@ -349,7 +349,7 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
                 <span> Move faster.</span>
               </h1>
               <p>
-                One private workspace for AI-matched openings, application tracking and your daily job search across Chennai, Coimbatore and Kerala.
+                One private workspace for AI-matched openings, application tracking and job discovery across all cities in Tamil Nadu, all cities in Kerala, and Bengaluru.
               </p>
             </div>
 
@@ -537,13 +537,13 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
         <h1>
           Fresh jobs. <span>Matched to your profile.</span>
         </h1>
-        <p>MCA · Fresher/0–1 year · Chennai · Coimbatore · Kerala · WFO · ₹3–4 LPA target</p>
+        <p>MCA · Fresher/0–1 year · Tamil Nadu — all cities · Kerala — all cities · Bengaluru · WFO priority · ₹3 LPA average target</p>
       </section>
 
       <section className="content">
         <div className="panel run">
           <div>
-            <b>24-hour job scan</b>
+            <b>7-day statewide job scan</b>
             <small>{status}</small>
           </div>
           <button onClick={refresh} disabled={loading}>
@@ -553,8 +553,8 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
 
         <div className="stats">
           <div>
-            <b>{jobs.filter((job) => job.fit >= 75).length}</b>
-            <span>75%+ matches</span>
+            <b>{jobs.length}</b>
+            <span>All eligible matches</span>
           </div>
           <div>
             <b>{Object.values(apps).filter((value) => value === "applied").length}</b>
@@ -589,7 +589,7 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
         </div>
 
         <h2>
-          Latest matches <small>{visible.length} roles</small>
+          All eligible matches <small>{visible.length} roles</small>
         </h2>
 
         <div className="jobs">
