@@ -30,16 +30,29 @@ const keywordCatalog: Array<[string, RegExp]> = [
   ["Postman", /postman/i],
   ["Jira", /\bjira\b/i],
   ["Java", /\bjava\b|core java/i],
+  ["Python", /\bpython\b/i],
+  ["C#", /\bc#\b|c sharp/i],
+  [".NET", /\.net\b|dotnet/i],
+  ["Spring Boot", /spring boot/i],
   ["SQL", /\bsql\b/i],
+  ["MySQL", /\bmysql\b/i],
+  ["PostgreSQL", /postgresql|\bpostgres\b/i],
+  ["MongoDB", /mongodb/i],
   ["HTML", /\bhtml5?\b/i],
   ["CSS", /\bcss3?\b/i],
   ["JavaScript", /javascript|\bjs\b/i],
-  ["PHP", /\bphp\b/i],
-  ["Python", /\bpython\b/i],
+  ["TypeScript", /typescript/i],
+  ["Angular", /\bangular\b/i],
   ["React", /\breact\b/i],
   ["Next.js", /next\.?js/i],
   ["Node.js", /node\.?js/i],
+  ["PHP", /\bphp\b/i],
+  ["REST APIs", /rest(?:ful)?\s+api|rest api|api development/i],
   ["Git", /\bgit\b|github/i],
+  ["Docker", /\bdocker\b/i],
+  ["Kubernetes", /kubernetes|\bk8s\b/i],
+  ["AWS", /\baws\b|amazon web services/i],
+  ["Azure", /\bazure\b/i],
   ["Troubleshooting", /troubleshoot|diagnos|root cause/i],
   ["Technical Support", /technical support|system support|it support|service desk|help desk|helpdesk/i],
   ["Customer Support", /customer support|customer service|client support/i],
@@ -57,7 +70,7 @@ const keywordCatalog: Array<[string, RegExp]> = [
 
 const rolePatterns: Record<ResumeRole, RegExp> = {
   "manual-testing": /manual test|software testing|test case|functional test|regression|smoke|sanity|bug|defect|sdlc|stlc|selenium|sql/i,
-  "software-developer": /software developer|software engineer|html|css|javascript|php|sql|java|python|react|next\.?js|node\.?js|web app|website/i,
+  "software-developer": /software developer|software engineer|html|css|javascript|typescript|angular|php|sql|java|python|react|next\.?js|node\.?js|web app|website/i,
   "technical-support": /technical support|system support|it support|troubleshoot|windows|linux|networking|ticket|documentation|communication|ms office/i,
 };
 
@@ -65,11 +78,12 @@ const summaryPriority: Record<ResumeRole, string[]> = {
   "manual-testing": [
     "Manual Testing", "Test Cases", "Functional Testing", "Regression Testing", "Smoke Testing",
     "Sanity Testing", "Bug / Defect Tracking", "STLC", "SDLC", "SQL", "Selenium",
-    "Automation Testing", "API Testing", "Postman", "Jira", "Java", "Documentation", "Communication",
+    "Automation Testing", "API Testing", "Postman", "Jira", "Java", "Git", "Documentation", "Communication",
   ],
   "software-developer": [
-    "Python", "Java", "JavaScript", "SQL", "HTML", "CSS", "React", "Next.js", "Node.js",
-    "PHP", "Git", "Problem Solving", "Teamwork", "Communication", "Documentation",
+    "Python", "Java", "JavaScript", "TypeScript", "Angular", "React", "Next.js", "Node.js",
+    "C#", ".NET", "Spring Boot", "SQL", "MySQL", "PostgreSQL", "MongoDB", "HTML", "CSS",
+    "PHP", "REST APIs", "Git", "Docker", "Kubernetes", "AWS", "Azure", "Problem Solving", "Teamwork", "Communication", "Documentation",
   ],
   "technical-support": [
     "Technical Support", "Troubleshooting", "Windows", "Linux", "Networking", "Active Directory",
@@ -95,7 +109,7 @@ function overlapScore(line: string, jd: string) {
       .toLowerCase()
       .replace(/[^a-z0-9+#.\/-]+/g, " ")
       .split(/\s+/)
-      .filter((word) => word.length >= 5),
+      .filter((word) => word.length >= 4),
   );
 
   for (const token of line.toLowerCase().split(/\s+/)) {
@@ -113,12 +127,15 @@ function stableRank(lines: string[], jd: string) {
 
 function uniqueSkills(lines: string[]) {
   const seen = new Set<string>();
-  return lines.filter((line) => {
-    const key = line.toLowerCase().replace(/[^a-z0-9+#.]+/g, " ").trim();
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  return lines
+    .map((line) => line.replace(/^[-*]\s*/, "").trim())
+    .filter(Boolean)
+    .filter((line) => {
+      const key = line.toLowerCase().replace(/[^a-z0-9+#.]+/g, " ").trim();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 }
 
 function skillLineForKeyword(label: string, existingSkills: string[]) {
@@ -137,7 +154,31 @@ function skillLineForKeyword(label: string, existingSkills: string[]) {
     if (office) return office;
   }
 
+  // The label is returned only after the caller has verified that the skill exists
+  // somewhere in the selected base resume (skills, projects, training, etc.).
   return label;
+}
+
+function exactSkillPhraseMatch(skill: string, jd: string) {
+  const normalizedSkill = skill
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/[^a-z0-9+#.]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const normalizedJd = jd
+    .toLowerCase()
+    .replace(/[^a-z0-9+#.]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!normalizedSkill || normalizedSkill.length < 2) return false;
+  if (normalizedJd.includes(normalizedSkill)) return true;
+
+  const meaningful = normalizedSkill
+    .split(" ")
+    .filter((token) => token.length >= 3 && !["fluent", "word", "excel"].includes(token));
+  return meaningful.length > 0 && meaningful.every((token) => normalizedJd.includes(token));
 }
 
 function tailorSkillsForJd(
@@ -146,43 +187,45 @@ function tailorSkillsForJd(
   role: ResumeRole,
   jd: string,
 ) {
+  const cleanExisting = uniqueSkills(existingSkills);
   const jdKeywords = keywordLabels(jd);
   const verifiedKeywords = keywordLabels(baseText);
   const verifiedSet = new Set(verifiedKeywords);
-  const priority = new Map(summaryPriority[role].map((item, index) => [item, index]));
+  const rolePriority = new Map(summaryPriority[role].map((item, index) => [item, index]));
 
-  const matchedLabels = jdKeywords
+  // 1) Highest priority: skills explicitly requested by the JD and verified anywhere
+  // in the selected base resume. This can promote a project/training skill into SKILLS.
+  const jdVerifiedLabels = jdKeywords
     .filter((label) => verifiedSet.has(label))
-    .sort((a, b) => (priority.get(a) ?? 999) - (priority.get(b) ?? 999));
+    .map((label, jdIndex) => ({ label, jdIndex, roleIndex: rolePriority.get(label) ?? 999 }))
+    .sort((a, b) => a.jdIndex - b.jdIndex || a.roleIndex - b.roleIndex)
+    .map(({ label }) => skillLineForKeyword(label, cleanExisting));
 
-  const directSkills = matchedLabels.map((label) => skillLineForKeyword(label, existingSkills));
+  // 2) Preserve base-resume skills whose wording directly matches the JD, even when
+  // they are not represented in the fixed keyword catalog.
+  const directPhraseMatches = cleanExisting.filter((skill) => exactSkillPhraseMatch(skill, jd));
 
-  const lexicalMatches = existingSkills
+  // 3) Keep additional base skills only when they have meaningful lexical overlap
+  // with this JD. Unrelated generic skills are intentionally removed for this version.
+  const lexicalMatches = cleanExisting
     .map((skill, index) => ({ skill, index, score: overlapScore(skill, jd) }))
-    .filter((item) => item.score > 0)
+    .filter((item) => item.score >= 2)
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .map((item) => item.skill);
 
-  const result = uniqueSkills([...directSkills, ...lexicalMatches]);
+  let result = uniqueSkills([...jdVerifiedLabels, ...directPhraseMatches, ...lexicalMatches]);
 
-  // Keep the SKILLS section concise and job-specific. If the JD has only a few verified
-  // overlaps, add a small number of role-relevant skills that are still verified in the
-  // uploaded resume instead of padding the section with unrelated generic skills.
-  if (result.length < 6) {
+  // If the JD is narrow, keep a few verified skills that are strongly relevant to the
+  // selected role so the section is useful without becoming generic or misleading.
+  if (result.length < 4) {
     const verifiedRoleSkills = summaryPriority[role]
       .filter((label) => verifiedSet.has(label))
-      .map((label) => skillLineForKeyword(label, existingSkills));
-    result.push(...verifiedRoleSkills.filter((skill) => !result.some((item) => item.toLowerCase() === skill.toLowerCase())));
+      .map((label) => skillLineForKeyword(label, cleanExisting));
+    result = uniqueSkills([...result, ...verifiedRoleSkills]);
   }
 
-  if (result.length < 6) {
-    const transferable = existingSkills.filter((skill) =>
-      /communication|documentation|team|problem|adaptability|time management|ms office|data entry/i.test(skill),
-    );
-    result.push(...transferable.filter((skill) => !result.some((item) => item.toLowerCase() === skill.toLowerCase())));
-  }
-
-  return uniqueSkills(result).slice(0, 10);
+  // Never pad with unrelated skills. The final section is a compact JD-focused set.
+  return result.slice(0, 10);
 }
 
 function listPhrase(items: string[]) {
@@ -277,7 +320,7 @@ function analyze(baseText: string, resume: TailoredResume, role: ResumeRole, jd:
   const score = Math.max(0, Math.min(100, keywordCoverage + roleEvidence + structure + contact));
   const notes: string[] = [];
   if (missingKeywords.length) {
-    notes.push(`JD keywords not verified in the generated resume: ${missingKeywords.slice(0, 8).join(", ")}. Only add them if they are genuinely true.`);
+    notes.push(`JD requirements not present in the selected base resume: ${missingKeywords.slice(0, 8).join(", ")}.`);
   }
   if (!jdKeywords.length) {
     notes.push("The job description did not contain enough recognized role keywords for a strong JD-specific score.");
