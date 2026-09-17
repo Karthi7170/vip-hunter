@@ -2,14 +2,21 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  ArrowRight,
   Bookmark,
   BookmarkCheck,
+  BriefcaseBusiness,
   ExternalLink,
+  KeyRound,
   LoaderCircle,
+  LockKeyhole,
   LogOut,
+  Mail,
   MapPin,
   RefreshCw,
   Search,
+  ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import { createBrowserSupabase } from "@/lib/supabase-browser";
 import type { Job, JobType } from "@/lib/jobs";
@@ -301,106 +308,214 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
   }
 
   if (!userId) {
+    const authHasError = /error|failed|invalid|must|match/i.test(status);
+
     return (
-      <main>
-        <section className="hero">
-          <b className="brand">VIP-Hunter</b>
-          <h1>
-            Your private <span>AI job hunter.</span>
-          </h1>
-          <p>Create your password once, then use normal email-and-password login. No magic-link email is required.</p>
-        </section>
+      <main className="auth-page">
+        <div className="auth-orb auth-orb-one" />
+        <div className="auth-orb auth-orb-two" />
 
-        <section className="panel login auth-card">
-          <div className="auth-switch">
-            <button
-              type="button"
-              className={authMode === "login" ? "active" : "secondary"}
-              onClick={() => {
-                setAuthMode("login");
-                setStatus("Enter your email and password.");
-              }}
-            >
-              Sign in
-            </button>
-            <button
-              type="button"
-              className={authMode === "setup" ? "active" : "secondary"}
-              onClick={() => {
-                setAuthMode("setup");
-                setStatus("Create your password using your private setup PIN.");
-              }}
-            >
-              Create password
-            </button>
-          </div>
+        <div className="auth-layout">
+          <section className="auth-showcase">
+            <div className="ai-mad-badge">
+              <Sparkles size={16} />
+              <strong>AI-MAD</strong>
+              <span>Career Intelligence</span>
+            </div>
 
-          {authMode === "login" ? (
-            <form className="auth-form" onSubmit={login}>
-              <input
-                type="email"
-                required
-                autoComplete="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="Email"
-              />
-              <input
-                type="password"
-                required
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="Password"
-              />
-              <button type="submit" disabled={loading}>
-                {loading ? "Signing in…" : "Sign in"}
-              </button>
-            </form>
-          ) : (
-            <form className="auth-form" onSubmit={setupPassword}>
-              <input
-                type="email"
-                required
-                autoComplete="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="Email"
-              />
-              <input
-                type="password"
-                required
-                minLength={8}
-                autoComplete="new-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="Create password (8+ characters)"
-              />
-              <input
-                type="password"
-                required
-                minLength={8}
-                autoComplete="new-password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                placeholder="Confirm password"
-              />
-              <input
-                type="password"
-                required
-                value={setupPin}
-                onChange={(event) => setSetupPin(event.target.value)}
-                placeholder="Private setup PIN"
-              />
-              <button type="submit" disabled={loading}>
-                {loading ? "Creating…" : "Create password"}
-              </button>
-              <small className="auth-note">This sets the password directly on your private Supabase account and does not send an email.</small>
-            </form>
-          )}
+            <div className="auth-brand-block">
+              <div className="auth-brand-mark">VH</div>
+              <div>
+                <b>VIP-Hunter</b>
+                <small>powered by AI-MAD</small>
+              </div>
+            </div>
 
-          {status !== "Loading…" && <small className="auth-status">{status}</small>}
-        </section>
+            <div className="auth-copy">
+              <p className="auth-eyebrow">PRIVATE AI JOB COMMAND CENTER</p>
+              <h1>
+                Find better roles.
+                <span> Move faster.</span>
+              </h1>
+              <p>
+                One private workspace for AI-matched openings, application tracking and your daily job search across Chennai, Coimbatore and Kerala.
+              </p>
+            </div>
+
+            <div className="auth-features">
+              <div>
+                <span className="auth-feature-icon"><Sparkles size={18} /></span>
+                <p><b>AI-MAD matching</b><small>Ranks opportunities against your verified profile.</small></p>
+              </div>
+              <div>
+                <span className="auth-feature-icon"><BriefcaseBusiness size={18} /></span>
+                <p><b>Fresh job discovery</b><small>Focuses on relevant fresher and 0–1 year roles.</small></p>
+              </div>
+              <div>
+                <span className="auth-feature-icon"><ShieldCheck size={18} /></span>
+                <p><b>Private tracking</b><small>Your saved jobs and application status stay synced.</small></p>
+              </div>
+            </div>
+
+            <div className="auth-showcase-footer">
+              <span className="live-dot" /> AI-MAD system ready
+            </div>
+          </section>
+
+          <section className="auth-panel-wrap">
+            <div className="auth-card-new">
+              <div className="auth-card-heading">
+                <span className="mini-brand">AI-MAD × VIP-Hunter</span>
+                <h2>{authMode === "login" ? "Welcome back" : "Create your password"}</h2>
+                <p>
+                  {authMode === "login"
+                    ? "Sign in to open your private job dashboard."
+                    : "Set your password once, then use normal sign-in from any device."}
+                </p>
+              </div>
+
+              <div className="auth-tabs" role="tablist" aria-label="Authentication mode">
+                <button
+                  type="button"
+                  className={authMode === "login" ? "active" : ""}
+                  onClick={() => {
+                    setAuthMode("login");
+                    setStatus("Enter your email and password.");
+                  }}
+                >
+                  Sign in
+                </button>
+                <button
+                  type="button"
+                  className={authMode === "setup" ? "active" : ""}
+                  onClick={() => {
+                    setAuthMode("setup");
+                    setStatus("Create your password using your private setup PIN.");
+                  }}
+                >
+                  Create password
+                </button>
+              </div>
+
+              {authMode === "login" ? (
+                <form className="auth-form-new" onSubmit={login}>
+                  <label>
+                    <span>Email address</span>
+                    <div className="auth-field">
+                      <Mail size={18} />
+                      <input
+                        type="email"
+                        required
+                        autoComplete="email"
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        placeholder="you@example.com"
+                      />
+                    </div>
+                  </label>
+
+                  <label>
+                    <span>Password</span>
+                    <div className="auth-field">
+                      <LockKeyhole size={18} />
+                      <input
+                        type="password"
+                        required
+                        autoComplete="current-password"
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        placeholder="Enter your password"
+                      />
+                    </div>
+                  </label>
+
+                  <button className="auth-primary" type="submit" disabled={loading}>
+                    {loading ? <LoaderCircle className="spin" size={18} /> : <>Open dashboard <ArrowRight size={18} /></>}
+                  </button>
+                </form>
+              ) : (
+                <form className="auth-form-new" onSubmit={setupPassword}>
+                  <label>
+                    <span>Email address</span>
+                    <div className="auth-field">
+                      <Mail size={18} />
+                      <input
+                        type="email"
+                        required
+                        autoComplete="email"
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        placeholder="you@example.com"
+                      />
+                    </div>
+                  </label>
+
+                  <label>
+                    <span>Create password</span>
+                    <div className="auth-field">
+                      <LockKeyhole size={18} />
+                      <input
+                        type="password"
+                        required
+                        minLength={8}
+                        autoComplete="new-password"
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        placeholder="Minimum 8 characters"
+                      />
+                    </div>
+                  </label>
+
+                  <label>
+                    <span>Confirm password</span>
+                    <div className="auth-field">
+                      <LockKeyhole size={18} />
+                      <input
+                        type="password"
+                        required
+                        minLength={8}
+                        autoComplete="new-password"
+                        value={confirmPassword}
+                        onChange={(event) => setConfirmPassword(event.target.value)}
+                        placeholder="Re-enter your password"
+                      />
+                    </div>
+                  </label>
+
+                  <label>
+                    <span>Private setup PIN</span>
+                    <div className="auth-field">
+                      <KeyRound size={18} />
+                      <input
+                        type="password"
+                        required
+                        value={setupPin}
+                        onChange={(event) => setSetupPin(event.target.value)}
+                        placeholder="Enter your private PIN"
+                      />
+                    </div>
+                  </label>
+
+                  <button className="auth-primary" type="submit" disabled={loading}>
+                    {loading ? <LoaderCircle className="spin" size={18} /> : <>Create password <ArrowRight size={18} /></>}
+                  </button>
+
+                  <p className="auth-security-note">
+                    <ShieldCheck size={16} /> Password setup is handled through your private server route and does not use a magic-link email.
+                  </p>
+                </form>
+              )}
+
+              {status !== "Loading…" && (
+                <div className={`auth-status-new ${authHasError ? "error" : ""}`}>{status}</div>
+              )}
+
+              <div className="auth-card-footer">
+                <ShieldCheck size={15} /> Secure private access · AI-MAD intelligence layer
+              </div>
+            </div>
+          </section>
+        </div>
       </main>
     );
   }
@@ -409,7 +524,7 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
     <main>
       <section className="hero">
         <div className="top">
-          <b className="brand">VIP-Hunter</b>
+          <b className="brand">VIP-Hunter <span className="brand-ai">AI-MAD</span></b>
           <button onClick={() => sb.auth.signOut()}>
             <LogOut size={16} /> Sign out
           </button>
