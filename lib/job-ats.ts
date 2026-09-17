@@ -61,6 +61,22 @@ const rolePatterns: Record<ResumeRole, RegExp> = {
   "technical-support": /technical support|system support|it support|troubleshoot|windows|linux|networking|ticket|documentation|communication|ms office/i,
 };
 
+const summaryPriority: Record<ResumeRole, string[]> = {
+  "manual-testing": [
+    "Manual Testing", "Test Cases", "Functional Testing", "Regression Testing", "Smoke Testing",
+    "Sanity Testing", "Bug / Defect Tracking", "STLC", "SDLC", "SQL", "Selenium",
+    "Automation Testing", "API Testing", "Postman", "Jira", "Java", "Documentation", "Communication",
+  ],
+  "software-developer": [
+    "Python", "Java", "JavaScript", "SQL", "HTML", "CSS", "React", "Next.js", "Node.js",
+    "PHP", "Git", "Problem Solving", "Teamwork", "Communication", "Documentation",
+  ],
+  "technical-support": [
+    "Technical Support", "Troubleshooting", "Windows", "Linux", "Networking", "Active Directory",
+    "Ticketing", "Customer Support", "Documentation", "Communication", "MS Office", "Problem Solving", "Teamwork",
+  ],
+};
+
 function keywordLabels(text: string) {
   return keywordCatalog
     .filter(([, pattern]) => pattern.test(text))
@@ -93,6 +109,67 @@ function stableRank(lines: string[], jd: string) {
     .map((line, index) => ({ line, index, score: overlapScore(line, jd) }))
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .map((item) => item.line);
+}
+
+function listPhrase(items: string[]) {
+  if (!items.length) return "";
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+}
+
+function summarySkills(role: ResumeRole, matched: string[]) {
+  const rank = new Map(summaryPriority[role].map((item, index) => [item, index]));
+  return [...matched]
+    .sort((a, b) => (rank.get(a) ?? 999) - (rank.get(b) ?? 999))
+    .slice(0, 5);
+}
+
+function transferableStrengths(baseText: string) {
+  const strengths: string[] = [];
+  if (/documentation|records|tracking/i.test(baseText)) strengths.push("documentation and record tracking");
+  if (/coordinated|internal teams|team onboarding|process management/i.test(baseText)) strengths.push("cross-team coordination");
+  if (/communication|interacting|calls|follow-ups|guidance|queries/i.test(baseText)) strengths.push("professional communication");
+  if (/administrative|operational activities|workflow|operations/i.test(baseText)) strengths.push("structured operational support");
+  return strengths.slice(0, 3);
+}
+
+function buildJdSummary(baseText: string, role: ResumeRole, target: string, matched: string[]) {
+  const qualification = /\bM\.?\s*C\.?\s*A\b/i.test(baseText) ? "MCA graduate" : "Candidate";
+  const skills = summarySkills(role, matched);
+  const skillsText = listPhrase(skills);
+  const strengths = transferableStrengths(baseText);
+  const strengthsText = listPhrase(strengths);
+  const hasProjectEvidence = /\b(projects?|web app|website|developed|built|text analyzer|tiles)\b/i.test(baseText);
+
+  if (role === "software-developer") {
+    const opening = hasProjectEvidence
+      ? `${qualification} with hands-on academic project experience in web application development`
+      : `${qualification} with a foundation in software development`;
+    const skillSentence = skillsText ? ` and relevant technical skills in ${skillsText}.` : ".";
+    const transferSentence = strengthsText
+      ? ` Professional experience has strengthened ${strengthsText}, supporting a disciplined and collaborative approach to software delivery.`
+      : " Brings a structured, learning-focused approach to software development and problem-solving.";
+    return `${opening}${skillSentence}${transferSentence} Seeking the ${target} opportunity to apply these strengths while continuing to grow in the technologies required by the role.`;
+  }
+
+  if (role === "manual-testing") {
+    const opening = skillsText
+      ? `${qualification} pursuing the ${target} opportunity with verified knowledge in ${skillsText}.`
+      : `${qualification} pursuing the ${target} opportunity with a foundation in software quality and structured problem-solving.`;
+    const transferSentence = strengthsText
+      ? ` Brings professional strengths in ${strengthsText}, supporting a detail-oriented and process-focused approach to quality assurance.`
+      : " Brings a detail-oriented and process-focused approach to software quality.";
+    return `${opening}${transferSentence}`;
+  }
+
+  const opening = skillsText
+    ? `${qualification} pursuing the ${target} opportunity with relevant strengths in ${skillsText}.`
+    : `${qualification} pursuing the ${target} opportunity with a foundation in user support and structured problem-solving.`;
+  const transferSentence = strengthsText
+    ? ` Professional experience in ${strengthsText} provides a strong foundation for responsive, well-documented technical support.`
+    : " Brings a service-oriented, organized approach to technical support and issue resolution.";
+  return `${opening}${transferSentence}`;
 }
 
 function analyze(baseText: string, resume: TailoredResume, role: ResumeRole, jd: string): AtsAnalysis {
@@ -163,11 +240,7 @@ export function tailorResumeForJob(
   const verified = keywordLabels(baseText);
   const matched = jdKeywords.filter((item) => verified.includes(item));
   const target = jobTitle?.trim() || base.roleLabel;
-  const companyPhrase = company?.trim() ? ` at ${company.trim()}` : "";
-  const qualification = /\bM\.?\s*C\.?\s*A\b/i.test(baseText) ? "MCA graduate" : "Candidate";
-  const summary = matched.length
-    ? `${qualification} targeting ${target}${companyPhrase}. Verified overlap with the job description includes ${matched.slice(0, 6).join(", ")}. The resume prioritizes only evidence already present in the base resume and does not add unverified skills or experience.`
-    : `${qualification} targeting ${target}${companyPhrase}. This version is structured around the supplied job description while preserving only facts verified in the base resume.`;
+  const summary = buildJdSummary(baseText, role, target, matched);
 
   const tailored: TailoredResume = {
     ...base,
