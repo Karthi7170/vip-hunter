@@ -3,8 +3,9 @@ import mammoth from "mammoth";
 import pdfParse from "pdf-parse";
 import { createAdminSupabase } from "@/lib/supabase-admin";
 import { filenameForResume, type ResumeRole } from "@/lib/resume-generator";
-import { renderOriginalResumeTemplate } from "@/lib/original-resume-template";
 import { tailorResumeForJob } from "@/lib/job-ats";
+import { structureTailoredResumeForJd } from "@/lib/structured-jd-resume";
+import { renderStructuredOriginalResumeTemplate } from "@/lib/structured-original-resume-template";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -66,8 +67,39 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Not enough readable resume text was found. Try a text-based PDF or DOCX." }, { status: 400 });
     }
 
-    const { resume, ats } = tailorResumeForJob(baseText, role, jobDescription, jobTitle, company);
-    const pdfBytes = await renderOriginalResumeTemplate(resume, baseText);
+    const target = jobTitle || (role === "software-developer"
+      ? "Software Developer"
+      : role === "technical-support"
+        ? "Technical Support"
+        : "Manual Testing / QA");
+
+    const initial = tailorResumeForJob(baseText, role, jobDescription, jobTitle, company);
+    const structured = structureTailoredResumeForJd(baseText, jobDescription, role, target, initial.resume);
+    const resume = structured.resume;
+
+    const keywordCoverage = structured.jdKeywords.length
+      ? Math.round((structured.matchedKeywords.length / structured.jdKeywords.length) * 65)
+      : 0;
+    const breakdown = { ...initial.ats.breakdown, keywordCoverage };
+    const score = Math.max(
+      0,
+      Math.min(100, keywordCoverage + breakdown.roleEvidence + breakdown.structure + breakdown.contact),
+    );
+    const ats = {
+      ...initial.ats,
+      score,
+      matchedKeywords: structured.matchedKeywords,
+      missingKeywords: structured.missingKeywords,
+      breakdown,
+      notes: [
+        ...(structured.missingKeywords.length
+          ? [`JD requirements not evidenced in the selected base resume: ${structured.missingKeywords.slice(0, 8).join(", ")}.`]
+          : []),
+        ...initial.ats.notes.filter((note) => !/^JD requirements not present|^JD keywords not verified/i.test(note)),
+      ],
+    };
+
+    const pdfBytes = await renderStructuredOriginalResumeTemplate(resume, baseText);
     const filename = filenameForResume(resume);
 
     return NextResponse.json({
@@ -79,8 +111,8 @@ export async function POST(request: NextRequest) {
       jobTitle,
       company,
       generatedAt: new Date().toISOString(),
-      templateMode: "original-base-resume",
-      disclaimer: "VIP-Hunter preserves the original base-resume structure and changes only JD-relevant content that is supported by the uploaded resume. The ATS score is an explainable resume-to-job-description compatibility score, not a score returned by an employer's ATS vendor.",
+      templateMode: "structured-original-base-resume",
+      disclaimer: "VIP-Hunter keeps the approved one-page format, preserves factual identity, education, work history and project evidence from the selected base resume, and prioritizes JD-relevant content without claiming unsupported experience. The ATS score is an explainable resume-to-job-description compatibility score, not a score returned by an employer's ATS vendor.",
     });
   } catch (error) {
     return NextResponse.json(
