@@ -70,10 +70,10 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("Loading…");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [sent, setSent] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -173,16 +173,11 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
   async function login(event: React.FormEvent) {
     event.preventDefault();
     setLoading(true);
-    setSent(false);
-    setStatus("Sending secure sign-in link…");
+    setStatus("Signing in…");
 
-    const redirectBase = (process.env.NEXT_PUBLIC_SITE_URL || window.location.origin).replace(/\/$/, "");
-    const { error } = await sb.auth.signInWithOtp({
+    const { error } = await sb.auth.signInWithPassword({
       email: email.trim(),
-      options: {
-        emailRedirectTo: `${redirectBase}/`,
-        shouldCreateUser: false,
-      },
+      password,
     });
 
     setLoading(false);
@@ -192,8 +187,29 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
       return;
     }
 
-    setSent(true);
-    setStatus("Sign-in link sent. Check your Inbox and Spam folders.");
+    setStatus("Signed in successfully.");
+  }
+
+  async function sendPasswordReset() {
+    if (!email.trim()) {
+      setStatus("Enter your email first.");
+      return;
+    }
+
+    setLoading(true);
+    setStatus("Sending password setup link…");
+    const redirectBase = (process.env.NEXT_PUBLIC_SITE_URL || window.location.origin).replace(/\/$/, "");
+    const { error } = await sb.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${redirectBase}/update-password`,
+    });
+    setLoading(false);
+
+    if (error) {
+      setStatus(`Password setup error: ${error.message}`);
+      return;
+    }
+
+    setStatus("Password setup link sent. Check your Inbox and Spam folders.");
   }
 
   async function toggle(id: string) {
@@ -262,18 +278,32 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
           <h1>
             Your private <span>AI job hunter.</span>
           </h1>
-          <p>Sign in by email to sync saved jobs, applications and matches across your iPhone.</p>
+          <p>Sign in with your email and password to sync jobs, applications and matches across your devices.</p>
         </section>
         <form className="panel login" onSubmit={login}>
           <input
             type="email"
             required
+            autoComplete="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             placeholder="you@example.com"
           />
-          <button disabled={loading}>{loading ? "Sending…" : "Send login link"}</button>
-          {(sent || status.startsWith("Sign-in error:")) && <small>{status}</small>}
+          <input
+            type="password"
+            required
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="Password"
+          />
+          <button type="submit" disabled={loading}>
+            {loading ? "Please wait…" : "Sign in"}
+          </button>
+          <button type="button" className="secondary" onClick={sendPasswordReset} disabled={loading}>
+            Set / reset password
+          </button>
+          {status !== "Loading…" && <small>{status}</small>}
         </form>
       </main>
     );
