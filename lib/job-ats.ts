@@ -154,8 +154,6 @@ function skillLineForKeyword(label: string, existingSkills: string[]) {
     if (office) return office;
   }
 
-  // The label is returned only after the caller has verified that the skill exists
-  // somewhere in the selected base resume (skills, projects, training, etc.).
   return label;
 }
 
@@ -193,39 +191,31 @@ function tailorSkillsForJd(
   const verifiedSet = new Set(verifiedKeywords);
   const rolePriority = new Map(summaryPriority[role].map((item, index) => [item, index]));
 
-  // 1) Highest priority: skills explicitly requested by the JD and verified anywhere
-  // in the selected base resume. This can promote a project/training skill into SKILLS.
-  const jdVerifiedLabels = jdKeywords
-    .filter((label) => verifiedSet.has(label))
+  // JD-first mode: the visible SKILLS section is built from the requirements in this
+  // job description, while preserving the exact six-slot layout of the approved resume.
+  // If a JD term already exists in the selected resume, keep its original wording.
+  const jdRequirementSkills = jdKeywords
     .map((label, jdIndex) => ({ label, jdIndex, roleIndex: rolePriority.get(label) ?? 999 }))
     .sort((a, b) => a.jdIndex - b.jdIndex || a.roleIndex - b.roleIndex)
     .map(({ label }) => skillLineForKeyword(label, cleanExisting));
 
-  // 2) Preserve base-resume skills whose wording directly matches the JD, even when
-  // they are not represented in the fixed keyword catalog.
+  let result = uniqueSkills(jdRequirementSkills);
+
+  // If the JD exposes fewer than six recognized requirements, fill the remaining fixed
+  // skill slots only with selected-resume skills that directly match the JD wording.
   const directPhraseMatches = cleanExisting.filter((skill) => exactSkillPhraseMatch(skill, jd));
+  result = uniqueSkills([...result, ...directPhraseMatches]);
 
-  // 3) Keep additional base skills only when they have meaningful lexical overlap
-  // with this JD. Unrelated generic skills are intentionally removed for this version.
-  const lexicalMatches = cleanExisting
-    .map((skill, index) => ({ skill, index, score: overlapScore(skill, jd) }))
-    .filter((item) => item.score >= 2)
-    .sort((a, b) => b.score - a.score || a.index - b.index)
-    .map((item) => item.skill);
-
-  let result = uniqueSkills([...jdVerifiedLabels, ...directPhraseMatches, ...lexicalMatches]);
-
-  // If the JD is narrow, keep a few verified skills that are strongly relevant to the
-  // selected role so the section is useful without becoming generic or misleading.
-  if (result.length < 4) {
+  // Last fallback: keep verified role-relevant skills from the selected resume so the
+  // original 2-column x 3-row SKILLS layout stays complete without changing the format.
+  if (result.length < 6) {
     const verifiedRoleSkills = summaryPriority[role]
       .filter((label) => verifiedSet.has(label))
       .map((label) => skillLineForKeyword(label, cleanExisting));
     result = uniqueSkills([...result, ...verifiedRoleSkills]);
   }
 
-  // Never pad with unrelated skills. The final section is a compact JD-focused set.
-  return result.slice(0, 10);
+  return result.slice(0, 6);
 }
 
 function listPhrase(items: string[]) {
@@ -272,7 +262,7 @@ function buildJdSummary(baseText: string, role: ResumeRole, target: string, matc
 
   if (role === "manual-testing") {
     const opening = skillsText
-      ? `${qualification} pursuing the ${target} opportunity with verified knowledge in ${skillsText}.`
+      ? `${qualification} pursuing the ${target} opportunity with relevant knowledge in ${skillsText}.`
       : `${qualification} pursuing the ${target} opportunity with a foundation in software quality and structured problem-solving.`;
     const transferSentence = strengthsText
       ? ` Brings professional strengths in ${strengthsText}, supporting a detail-oriented and process-focused approach to quality assurance.`
@@ -292,11 +282,15 @@ function buildJdSummary(baseText: string, role: ResumeRole, target: string, matc
 function analyze(baseText: string, resume: TailoredResume, role: ResumeRole, jd: string): AtsAnalysis {
   const jdKeywords = keywordLabels(jd);
   const resumeText = resume.plainText;
+  const baseKeywords = new Set(keywordLabels(baseText));
   const matchedKeywords = jdKeywords.filter((label) => {
     const entry = keywordCatalog.find(([name]) => name === label);
     return entry ? entry[1].test(resumeText) : false;
   });
-  const missingKeywords = jdKeywords.filter((label) => !matchedKeywords.includes(label));
+
+  // Kept in missingKeywords for API compatibility, but these are now JD-derived skills
+  // that were not found in the selected base resume and therefore need user verification.
+  const missingKeywords = jdKeywords.filter((label) => !baseKeywords.has(label));
 
   const keywordCoverage = jdKeywords.length
     ? Math.round((matchedKeywords.length / jdKeywords.length) * 65)
@@ -320,7 +314,7 @@ function analyze(baseText: string, resume: TailoredResume, role: ResumeRole, jd:
   const score = Math.max(0, Math.min(100, keywordCoverage + roleEvidence + structure + contact));
   const notes: string[] = [];
   if (missingKeywords.length) {
-    notes.push(`JD requirements not present in the selected base resume: ${missingKeywords.slice(0, 8).join(", ")}.`);
+    notes.push(`JD-derived skills added to the tailored SKILLS section but not found in the selected base resume: ${missingKeywords.slice(0, 8).join(", ")}. Review them for accuracy before applying.`);
   }
   if (!jdKeywords.length) {
     notes.push("The job description did not contain enough recognized role keywords for a strong JD-specific score.");
