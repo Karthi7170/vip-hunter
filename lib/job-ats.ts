@@ -111,6 +111,80 @@ function stableRank(lines: string[], jd: string) {
     .map((item) => item.line);
 }
 
+function uniqueSkills(lines: string[]) {
+  const seen = new Set<string>();
+  return lines.filter((line) => {
+    const key = line.toLowerCase().replace(/[^a-z0-9+#.]+/g, " ").trim();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function skillLineForKeyword(label: string, existingSkills: string[]) {
+  const entry = keywordCatalog.find(([name]) => name === label);
+  if (!entry) return label;
+  const [, pattern] = entry;
+  const existing = existingSkills.find((skill) => pattern.test(skill));
+  if (existing) return existing;
+
+  if (label === "Communication") {
+    const fluent = existingSkills.find((skill) => /english communication/i.test(skill));
+    if (fluent) return fluent;
+  }
+  if (label === "MS Office") {
+    const office = existingSkills.find((skill) => /ms office|microsoft office|word|excel/i.test(skill));
+    if (office) return office;
+  }
+
+  return label;
+}
+
+function tailorSkillsForJd(
+  existingSkills: string[],
+  baseText: string,
+  role: ResumeRole,
+  jd: string,
+) {
+  const jdKeywords = keywordLabels(jd);
+  const verifiedKeywords = keywordLabels(baseText);
+  const verifiedSet = new Set(verifiedKeywords);
+  const priority = new Map(summaryPriority[role].map((item, index) => [item, index]));
+
+  const matchedLabels = jdKeywords
+    .filter((label) => verifiedSet.has(label))
+    .sort((a, b) => (priority.get(a) ?? 999) - (priority.get(b) ?? 999));
+
+  const directSkills = matchedLabels.map((label) => skillLineForKeyword(label, existingSkills));
+
+  const lexicalMatches = existingSkills
+    .map((skill, index) => ({ skill, index, score: overlapScore(skill, jd) }))
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map((item) => item.skill);
+
+  const result = uniqueSkills([...directSkills, ...lexicalMatches]);
+
+  // Keep the SKILLS section concise and job-specific. If the JD has only a few verified
+  // overlaps, add a small number of role-relevant skills that are still verified in the
+  // uploaded resume instead of padding the section with unrelated generic skills.
+  if (result.length < 6) {
+    const verifiedRoleSkills = summaryPriority[role]
+      .filter((label) => verifiedSet.has(label))
+      .map((label) => skillLineForKeyword(label, existingSkills));
+    result.push(...verifiedRoleSkills.filter((skill) => !result.some((item) => item.toLowerCase() === skill.toLowerCase())));
+  }
+
+  if (result.length < 6) {
+    const transferable = existingSkills.filter((skill) =>
+      /communication|documentation|team|problem|adaptability|time management|ms office|data entry/i.test(skill),
+    );
+    result.push(...transferable.filter((skill) => !result.some((item) => item.toLowerCase() === skill.toLowerCase())));
+  }
+
+  return uniqueSkills(result).slice(0, 10);
+}
+
 function listPhrase(items: string[]) {
   if (!items.length) return "";
   if (items.length === 1) return items[0];
@@ -230,7 +304,10 @@ export function tailorResumeForJob(
   const jd = jobDescription.trim();
 
   const sections = base.sections.map((section) => {
-    if (["SKILLS", "EXPERIENCE", "PROJECTS", "CERTIFICATIONS"].includes(section.heading)) {
+    if (section.heading === "SKILLS") {
+      return { ...section, lines: tailorSkillsForJd(section.lines, baseText, role, jd) };
+    }
+    if (["EXPERIENCE", "PROJECTS", "CERTIFICATIONS"].includes(section.heading)) {
       return { ...section, lines: stableRank(section.lines, jd) };
     }
     return section;
