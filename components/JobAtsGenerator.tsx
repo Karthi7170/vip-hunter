@@ -50,7 +50,7 @@ export default function JobAtsGenerator({ job, onClose }: Props) {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState(
     job.jobDescription
-      ? "Job description loaded automatically. Upload your base resume to tailor it for this opening."
+      ? "Job description loaded automatically. Upload your base resume; its original format will be preserved."
       : "This older job does not include the full JD. Paste the job description from the application page.",
   );
   const [result, setResult] = useState<GenerateResponse | null>(null);
@@ -67,7 +67,7 @@ export default function JobAtsGenerator({ job, onClose }: Props) {
     }
 
     setLoading(true);
-    setStatus("Analysing the JD, matching verified evidence, and rebuilding the resume…");
+    setStatus("Analysing the JD and updating only JD-relevant content inside your original resume format…");
 
     try {
       const { data } = await sb.auth.getSession();
@@ -91,7 +91,7 @@ export default function JobAtsGenerator({ job, onClose }: Props) {
       if (pdfUrl) URL.revokeObjectURL(pdfUrl);
       setPdfUrl(toPdfUrl(payload.pdfBase64));
       setResult(payload);
-      setStatus(`JD-tailored resume ready · ATS match ${payload.ats.score}/100.`);
+      setStatus(`Original format preserved · JD-tailored content ready · ATS match ${payload.ats.score}/100.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "ATS resume generation failed.");
     } finally {
@@ -111,7 +111,7 @@ export default function JobAtsGenerator({ job, onClose }: Props) {
       </div>
 
       <div className={styles.explain}>
-        This tool reads the actual job description, ranks the verified content in your base resume against it, updates the target summary and section order, and never inserts an unverified skill just to raise the score.
+        Your uploaded resume template is locked: same one-page structure, section order and alignment. VIP-Hunter only updates JD-relevant summary, skill priority, experience bullet priority and project priority using facts already present in your base resume. It never invents a skill or experience to raise the score.
       </div>
 
       <label className={styles.jdLabel}>
