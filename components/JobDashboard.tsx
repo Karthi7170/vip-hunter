@@ -15,6 +15,7 @@ import { createBrowserSupabase } from "@/lib/supabase-browser";
 import type { Job, JobType } from "@/lib/jobs";
 
 type Filter = "All" | JobType;
+type AuthMode = "login" | "setup";
 type AppStatus =
   | "new"
   | "applied"
@@ -71,6 +72,9 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
   const [status, setStatus] = useState("Loading…");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [setupPin, setSetupPin] = useState("");
+  const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [userId, setUserId] = useState<string | null>(null);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -190,26 +194,52 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
     setStatus("Signed in successfully.");
   }
 
-  async function sendPasswordReset() {
-    if (!email.trim()) {
-      setStatus("Enter your email first.");
+  async function setupPassword(event: React.FormEvent) {
+    event.preventDefault();
+
+    if (password.length < 8) {
+      setStatus("Password must be at least 8 characters.");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setStatus("Passwords do not match.");
+      return;
+    }
+
+    if (!setupPin.trim()) {
+      setStatus("Enter your private setup PIN.");
       return;
     }
 
     setLoading(true);
-    setStatus("Sending password setup link…");
-    const redirectBase = (process.env.NEXT_PUBLIC_SITE_URL || window.location.origin).replace(/\/$/, "");
-    const { error } = await sb.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${redirectBase}/update-password`,
-    });
-    setLoading(false);
+    setStatus("Creating your password…");
 
-    if (error) {
-      setStatus(`Password setup error: ${error.message}`);
-      return;
+    try {
+      const response = await fetch("/api/auth/setup-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+          pin: setupPin,
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Password setup failed.");
+      }
+
+      setAuthMode("login");
+      setConfirmPassword("");
+      setSetupPin("");
+      setStatus(data.message || "Password created. You can sign in now.");
+    } catch (error) {
+      setStatus(error instanceof Error ? `Password setup error: ${error.message}` : "Password setup failed.");
+    } finally {
+      setLoading(false);
     }
-
-    setStatus("Password setup link sent. Check your Inbox and Spam folders.");
   }
 
   async function toggle(id: string) {
@@ -278,33 +308,99 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
           <h1>
             Your private <span>AI job hunter.</span>
           </h1>
-          <p>Sign in with your email and password to sync jobs, applications and matches across your devices.</p>
+          <p>Create your password once, then use normal email-and-password login. No magic-link email is required.</p>
         </section>
-        <form className="panel login" onSubmit={login}>
-          <input
-            type="email"
-            required
-            autoComplete="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            placeholder="you@example.com"
-          />
-          <input
-            type="password"
-            required
-            autoComplete="current-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder="Password"
-          />
-          <button type="submit" disabled={loading}>
-            {loading ? "Please wait…" : "Sign in"}
-          </button>
-          <button type="button" className="secondary" onClick={sendPasswordReset} disabled={loading}>
-            Set / reset password
-          </button>
-          {status !== "Loading…" && <small>{status}</small>}
-        </form>
+
+        <section className="panel login auth-card">
+          <div className="auth-switch">
+            <button
+              type="button"
+              className={authMode === "login" ? "active" : "secondary"}
+              onClick={() => {
+                setAuthMode("login");
+                setStatus("Enter your email and password.");
+              }}
+            >
+              Sign in
+            </button>
+            <button
+              type="button"
+              className={authMode === "setup" ? "active" : "secondary"}
+              onClick={() => {
+                setAuthMode("setup");
+                setStatus("Create your password using your private setup PIN.");
+              }}
+            >
+              Create password
+            </button>
+          </div>
+
+          {authMode === "login" ? (
+            <form className="auth-form" onSubmit={login}>
+              <input
+                type="email"
+                required
+                autoComplete="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="Email"
+              />
+              <input
+                type="password"
+                required
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Password"
+              />
+              <button type="submit" disabled={loading}>
+                {loading ? "Signing in…" : "Sign in"}
+              </button>
+            </form>
+          ) : (
+            <form className="auth-form" onSubmit={setupPassword}>
+              <input
+                type="email"
+                required
+                autoComplete="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="Email"
+              />
+              <input
+                type="password"
+                required
+                minLength={8}
+                autoComplete="new-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Create password (8+ characters)"
+              />
+              <input
+                type="password"
+                required
+                minLength={8}
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                placeholder="Confirm password"
+              />
+              <input
+                type="password"
+                required
+                value={setupPin}
+                onChange={(event) => setSetupPin(event.target.value)}
+                placeholder="Private setup PIN"
+              />
+              <button type="submit" disabled={loading}>
+                {loading ? "Creating…" : "Create password"}
+              </button>
+              <small className="auth-note">This sets the password directly on your private Supabase account and does not send an email.</small>
+            </form>
+          )}
+
+          {status !== "Loading…" && <small className="auth-status">{status}</small>}
+        </section>
       </main>
     );
   }
