@@ -41,6 +41,10 @@ function validPreparedJob(job) {
   );
 }
 
+async function clearPreparedResume() {
+  try { await chrome.storage.local.remove(["vipHunterPreparedResume", "vipHunterCurrentJob"]); } catch {}
+}
+
 async function openNext() {
   if (!running || activeTabId || pausedTabId) return;
 
@@ -48,18 +52,20 @@ async function openNext() {
   if (!next) {
     running = false;
     activeJob = null;
+    await clearPreparedResume();
     await broadcast("complete", completed ? `${completed} application${completed === 1 ? "" : "s"} submitted.` : "Queue finished.");
     return;
   }
 
   activeJob = next;
   await chrome.storage.local.set({
-    vipHunterResume: next.resume,
+    vipHunterPreparedResume: next.resume,
     vipHunterCurrentJob: {
       jobId: next.jobId,
       company: next.company || "",
       title: next.title || "",
       atsScore: Number(next.atsScore || 0),
+      url: next.url,
       preparedAt: Date.now(),
     },
   });
@@ -82,6 +88,7 @@ async function finishTab(tabId, reason = "") {
   if (tabId === activeTabId) activeTabId = null;
   if (tabId === pausedTabId) pausedTabId = null;
   activeJob = null;
+  await clearPreparedResume();
 
   await broadcast(
     "running",
@@ -107,6 +114,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       running = jobs.length > 0;
       lastReason = "";
       processedTabs.clear();
+      await clearPreparedResume();
 
       await broadcast(
         jobs.length ? "running" : "idle",
@@ -156,6 +164,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         processedTabs.add(tabId);
         try { await chrome.tabs.remove(tabId); } catch {}
       }
+      await clearPreparedResume();
       await broadcast(
         "running",
         "Skipped the blocked application. Moving to the next job…",
@@ -176,6 +185,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       for (const tabId of tabIds) {
         try { await chrome.tabs.remove(tabId); } catch {}
       }
+      await clearPreparedResume();
       await broadcast("stopped", "Auto-apply queue stopped.");
       sendResponse({ ok: true });
       return;
