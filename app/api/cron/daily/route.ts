@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findLiveJobs } from "@/lib/find-jobs-7d";
+import { findLiveJobs } from "@/lib/find-jobs-7d-v2";
 import { persistJobs } from "@/lib/persist-jobs";
 import { sendDailyWhatsApp, whatsappConfigured } from "@/lib/whatsapp";
 
