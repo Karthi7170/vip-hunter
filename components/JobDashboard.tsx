@@ -7,7 +7,6 @@ import {
   BookmarkCheck,
   BriefcaseBusiness,
   ExternalLink,
-  KeyRound,
   LoaderCircle,
   LockKeyhole,
   LogOut,
@@ -74,13 +73,11 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
   const [query, setQuery] = useState("");
   const [saved, setSaved] = useState<string[]>([]);
   const [apps, setApps] = useState<Record<string, AppStatus>>({});
-  const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("Loading…");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [setupPin, setSetupPin] = useState("");
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [userId, setUserId] = useState<string | null>(null);
   const [profileId, setProfileId] = useState<string | null>(null);
@@ -88,10 +85,12 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
 
   useEffect(() => {
     let alive = true;
+
     (async () => {
       const {
         data: { session },
       } = await sb.auth.getSession();
+
       if (alive) {
         setUserId(session?.user.id || null);
         setEmail(session?.user.email || "");
@@ -115,6 +114,7 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
 
     (async () => {
       setStatus("Syncing VIP-Hunter…");
+
       let { data: profile } = await sb
         .from("user_profiles")
         .select("id")
@@ -160,6 +160,7 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
       if (matches.data?.length) {
         setJobs(matches.data.map((row: any) => fromDb({ ...row.jobs, ...row })));
       }
+
       setSaved((savedJobs.data || []).map((row: any) => row.job_id));
       setApps(
         Object.fromEntries((applications.data || []).map((row: any) => [row.job_id, row.status])),
@@ -214,11 +215,6 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
       return;
     }
 
-    if (!setupPin.trim()) {
-      setStatus("Enter your private setup PIN.");
-      return;
-    }
-
     setLoading(true);
     setStatus("Creating your password…");
 
@@ -229,21 +225,21 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
         body: JSON.stringify({
           email: email.trim(),
           password,
-          pin: setupPin,
         }),
       });
-      const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.error || "Password setup failed.");
-      }
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Password setup failed.");
 
       setAuthMode("login");
       setConfirmPassword("");
-      setSetupPin("");
       setStatus(data.message || "Password created. You can sign in now.");
     } catch (error) {
-      setStatus(error instanceof Error ? `Password setup error: ${error.message}` : "Password setup failed.");
+      setStatus(
+        error instanceof Error
+          ? `Password setup error: ${error.message}`
+          : "Password setup failed.",
+      );
     } finally {
       setLoading(false);
     }
@@ -251,17 +247,23 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
 
   async function toggle(id: string) {
     if (!profileId) return;
+
     const isSaved = saved.includes(id);
-    setSaved((current) => (isSaved ? current.filter((x) => x !== id) : [...current, id]));
+    setSaved((current) =>
+      isSaved ? current.filter((item) => item !== id) : [...current, id],
+    );
+
     const queryResult = isSaved
       ? sb.from("saved_jobs").delete().eq("user_id", profileId).eq("job_id", id)
       : sb.from("saved_jobs").insert({ user_id: profileId, job_id: id });
+
     const { error } = await queryResult;
     if (error) setStatus(error.message);
   }
 
   async function setApp(id: string, value: AppStatus) {
     if (!profileId) return;
+
     setApps((current) => ({ ...current, [id]: value }));
     const { error } = await sb.from("applications").upsert(
       {
@@ -272,24 +274,33 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
       },
       { onConflict: "user_id,job_id" },
     );
+
     if (error) setStatus(error.message);
   }
 
   async function refresh() {
-    if (!pin.trim()) {
-      setStatus("Enter your private PIN");
-      return;
-    }
-
     setLoading(true);
     setStatus("Searching jobs posted in the last 24 hours…");
+
     try {
+      const {
+        data: { session },
+      } = await sb.auth.getSession();
+
+      if (!session?.access_token) {
+        throw new Error("Your session expired. Sign in again.");
+      }
+
       const response = await fetch("/api/jobs/live", {
         method: "POST",
-        headers: { "x-app-pin": pin },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
+
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Search failed");
+
       setJobs(data.jobs);
       setStatus(`${data.jobs.length} fresh matches found`);
     } catch (error) {
@@ -308,7 +319,7 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
   }
 
   if (!userId) {
-    const authHasError = /error|failed|invalid|must|match/i.test(status);
+    const authHasError = /error|failed|invalid|must|match|already/i.test(status);
 
     return (
       <main className="auth-page">
@@ -369,8 +380,8 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
                 <h2>{authMode === "login" ? "Welcome back" : "Create your password"}</h2>
                 <p>
                   {authMode === "login"
-                    ? "Sign in to open your private job dashboard."
-                    : "Set your password once, then use normal sign-in from any device."}
+                    ? "Sign in with your email and password to open your private job dashboard."
+                    : "Create your password once using only your existing VIP-Hunter email."}
                 </p>
               </div>
 
@@ -390,7 +401,7 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
                   className={authMode === "setup" ? "active" : ""}
                   onClick={() => {
                     setAuthMode("setup");
-                    setStatus("Create your password using your private setup PIN.");
+                    setStatus("Enter your email and create a password.");
                   }}
                 >
                   Create password
@@ -430,7 +441,11 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
                   </label>
 
                   <button className="auth-primary" type="submit" disabled={loading}>
-                    {loading ? <LoaderCircle className="spin" size={18} /> : <>Open dashboard <ArrowRight size={18} /></>}
+                    {loading ? (
+                      <LoaderCircle className="spin" size={18} />
+                    ) : (
+                      <>Open dashboard <ArrowRight size={18} /></>
+                    )}
                   </button>
                 </form>
               ) : (
@@ -482,26 +497,16 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
                     </div>
                   </label>
 
-                  <label>
-                    <span>Private setup PIN</span>
-                    <div className="auth-field">
-                      <KeyRound size={18} />
-                      <input
-                        type="password"
-                        required
-                        value={setupPin}
-                        onChange={(event) => setSetupPin(event.target.value)}
-                        placeholder="Enter your private PIN"
-                      />
-                    </div>
-                  </label>
-
                   <button className="auth-primary" type="submit" disabled={loading}>
-                    {loading ? <LoaderCircle className="spin" size={18} /> : <>Create password <ArrowRight size={18} /></>}
+                    {loading ? (
+                      <LoaderCircle className="spin" size={18} />
+                    ) : (
+                      <>Create password <ArrowRight size={18} /></>
+                    )}
                   </button>
 
                   <p className="auth-security-note">
-                    <ShieldCheck size={16} /> Password setup is handled through your private server route and does not use a magic-link email.
+                    <ShieldCheck size={16} /> No app PIN is required. Password creation is limited to an existing VIP-Hunter account and can only be completed once.
                   </p>
                 </form>
               )}
@@ -511,7 +516,7 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
               )}
 
               <div className="auth-card-footer">
-                <ShieldCheck size={15} /> Secure private access · AI-MAD intelligence layer
+                <ShieldCheck size={15} /> Secure email + password access · AI-MAD intelligence layer
               </div>
             </div>
           </section>
@@ -541,12 +546,6 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
             <b>24-hour job scan</b>
             <small>{status}</small>
           </div>
-          <input
-            type="password"
-            value={pin}
-            onChange={(event) => setPin(event.target.value)}
-            placeholder="Private app PIN"
-          />
           <button onClick={refresh} disabled={loading}>
             {loading ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />} Run now
           </button>
@@ -570,11 +569,19 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
         <div className="tools">
           <label>
             <Search size={17} />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search jobs…" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search jobs…"
+            />
           </label>
           <div>
             {(["All", "Testing", "Developer", "System"] as Filter[]).map((value) => (
-              <button className={filter === value ? "active" : ""} onClick={() => setFilter(value)} key={value}>
+              <button
+                className={filter === value ? "active" : ""}
+                onClick={() => setFilter(value)}
+                key={value}
+              >
                 {value}
               </button>
             ))}
@@ -601,23 +608,31 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
                     {saved.includes(job.id) ? <BookmarkCheck /> : <Bookmark />}
                   </button>
                 </header>
+
                 <p className="meta">
                   <MapPin size={14} />
                   {job.location} · {job.experience} · {job.mode} · {job.type}
                 </p>
+
                 <div className="tags">
                   {job.matchedSkills.map((skill) => (
                     <span key={skill}>✓ {skill}</span>
                   ))}
                 </div>
+
                 {job.missingSkills.length > 0 && (
                   <p className="missing">
                     <b>Missing/unverified:</b> {job.missingSkills.join(", ")}
                   </p>
                 )}
+
                 <p>{job.whyFit}</p>
+
                 <footer>
-                  <select value={apps[job.id] || "new"} onChange={(event) => setApp(job.id, event.target.value as AppStatus)}>
+                  <select
+                    value={apps[job.id] || "new"}
+                    onChange={(event) => setApp(job.id, event.target.value as AppStatus)}
+                  >
                     {statuses.map((value) => (
                       <option key={value} value={value}>
                         {value.replace("_", " ")}
