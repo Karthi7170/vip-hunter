@@ -1,7 +1,7 @@
 import type { Job, JobType } from "@/lib/jobs";
 
 const WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
-const MAX_RESULTS = 50;
+const MAX_RESULTS = 200;
 
 const leverBoards = [
   { slug: "valgenesis", name: "ValGenesis" },
@@ -25,24 +25,31 @@ const smartRecruitersBoards = [
   { id: "PinnacleSevenTechnologies", name: "Pinnacle Seven Technologies" },
 ];
 
+// State names catch postings that include the region. City aliases catch postings that only
+// expose a city in their ATS location field.
 const targetPlaces = [
-  "chennai",
-  "coimbatore",
-  "kerala",
-  "kochi",
-  "cochin",
-  "ernakulam",
-  "thiruvananthapuram",
-  "trivandrum",
-  "kozhikode",
-  "calicut",
-  "thrissur",
-  "kottayam",
-  "kollam",
-  "palakkad",
-  "alappuzha",
-  "kannur",
-  "malappuram",
+  // Tamil Nadu statewide
+  "tamil nadu", "tamilnadu",
+  "chennai", "coimbatore", "madurai", "tiruchirappalli", "trichy", "salem", "tiruppur",
+  "erode", "vellore", "hosur", "tirunelveli", "thoothukudi", "thootukudi", "tuticorin",
+  "dindigul", "thanjavur", "nagercoil", "kanniyakumari", "kanyakumari", "karur", "namakkal",
+  "cuddalore", "kanchipuram", "kanceepuram", "chengalpattu", "tiruvallur", "thiruvallur",
+  "villupuram", "kallakurichi", "krishnagiri", "dharmapuri", "sivaganga", "virudhunagar",
+  "ramanathapuram", "pudukkottai", "perambalur", "ariyalur", "tiruvannamalai",
+  "thiruvannamalai", "mayiladuthurai", "nagapattinam", "nilgiris", "ooty", "udhagamandalam",
+  "tenkasi", "ranipet", "tirupattur", "pollachi", "ambur", "vaniyambadi", "karaikudi",
+  "sivakasi", "rajapalayam", "neyveli", "kumbakonam", "avadi", "tambaram",
+
+  // Kerala statewide
+  "kerala", "kochi", "cochin", "ernakulam", "thiruvananthapuram", "trivandrum",
+  "kozhikode", "calicut", "thrissur", "trichur", "kottayam", "kollam", "palakkad",
+  "palghat", "alappuzha", "alleppey", "kannur", "malappuram", "kasaragod", "kasargod",
+  "wayanad", "kalpetta", "idukki", "thodupuzha", "pathanamthitta", "cherthala", "chalakudy",
+  "perumbavoor", "aluva", "angamaly", "irinjalakuda", "manjeri", "tirur", "kottarakkara",
+  "attingal", "kayamkulam",
+
+  // Bengaluru
+  "bengaluru", "bangalore", "bengalooru",
 ];
 
 const seniorTitle = /\b(senior|sr\.?|lead|staff|principal|manager|architect|director|head|engineer\s+(ii|iii|iv)|level\s*[2-9])\b/i;
@@ -85,9 +92,9 @@ function withinLast7Days(value: string | number | undefined) {
 
 function classifyRole(title: string): JobType | null {
   const text = title.toLowerCase();
-  if (/\b(qa|quality assurance|software test|test engineer|tester|testing|sdet)\b/.test(text)) return "Testing";
+  if (/\b(qa|quality assurance|quality engineer|software test|test engineer|tester|testing|sdet)\b/.test(text)) return "Testing";
   if (/\b(software engineer|software developer|developer|frontend|front-end|backend|back-end|fullstack|full stack|web developer|application engineer)\b/.test(text)) return "Developer";
-  if (/\b(system engineer|systems engineer|technical support|support engineer|system support|it support|service desk|help desk|helpdesk)\b/.test(text)) return "System";
+  if (/\b(system engineer|systems engineer|technical support|support engineer|system support|it support|desktop support|application support|production support|service desk|help desk|helpdesk)\b/.test(text)) return "System";
   return null;
 }
 
@@ -225,7 +232,6 @@ async function scanLever(board: { slug: string; name: string }): Promise<Job[]> 
 
     const { matched, missing } = getSkills(description);
     const fit = scoreJob(type, posting.text, mode, matched, missing);
-    if (fit < 60) continue;
 
     jobs.push({
       id: `lever-${board.slug}-${posting.id}`,
@@ -282,7 +288,7 @@ async function scanSmartRecruiters(board: { id: string; name: string }): Promise
     if (seniorTitle.test(posting.name)) return false;
     if (!classifyRole(posting.name)) return false;
     return locationAllowed(smartLocation(posting));
-  }).slice(0, 30);
+  }).slice(0, 100);
 
   const details = await Promise.allSettled(
     candidates.map((posting) =>
@@ -314,7 +320,6 @@ async function scanSmartRecruiters(board: { id: string; name: string }): Promise
 
     const { matched, missing } = getSkills(description);
     const fit = scoreJob(type, title, mode, matched, missing);
-    if (fit < 60) return;
 
     const releasedDate = posting.releasedDate || fallback.releasedDate;
     if (!releasedDate) return;
