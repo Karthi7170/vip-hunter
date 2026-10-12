@@ -391,7 +391,7 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
           </section>
           <section className="vh-stats" aria-label="Job search summary">
             <article className="vh-stat"><span className="vh-stat-icon purple"><BriefcaseBusiness size={21}/></span><div><small>Eligible matches</small><strong>{jobs.length}</strong><span>Opportunities found</span></div></article>
-            <article className="vh-stat"><span className="vh-stat-icon blue"><CheckCircle2 size={21}/></span><div><small>Applied</small><strong>{Object.values(apps).filter(v => v === "applied").length}</strong><span>Applications sent</span></div></article>
+            <article className="vh-stat"><span className="vh-stat-icon blue"><CheckCircle2 size={21}/></span><div><small>Applied</small><strong>{appliedCount}</strong><span>Applications sent</span></div></article>
             <article className="vh-stat"><span className="vh-stat-icon pink"><Bookmark size={21}/></span><div><small>Saved roles</small><strong>{saved.length}</strong><span>Your shortlist</span></div></article>
             <article className="vh-stat"><span className="vh-stat-icon orange"><CalendarDays size={21}/></span><div><small>Interviews</small><strong>{Object.values(apps).filter(v => v === "interview").length}</strong><span>In progress</span></div></article>
           </section>
