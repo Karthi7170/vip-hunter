@@ -8,6 +8,9 @@ import {
   CheckCircle2,
   Clock3,
   FileText,
+  ListFilter,
+  ChevronDown,
+  Compass,
   Bookmark,
   BookmarkCheck,
   BriefcaseBusiness,
@@ -32,6 +35,16 @@ type AuthMode = "login" | "setup";
 type AppStatus = "new" | "applied" | "action_required" | "assessment" | "interview" | "rejected" | "offer";
 
 const statuses: AppStatus[] = ["new", "applied", "action_required", "assessment", "interview", "rejected", "offer"];
+const statusLabels: Record<AppStatus, string> = {
+  new: "Not applied yet",
+  applied: "Application submitted",
+  action_required: "Needs my action",
+  assessment: "Assessment",
+  interview: "Interview",
+  rejected: "Not selected",
+  offer: "Offer received",
+};
+type SortOrder = "best" | "newest" | "company";
 
 function fromDb(x: any): Job {
   const min = x.experience_min;
@@ -68,6 +81,10 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
   const [jobs, setJobs] = useState(initialJobs);
   const [filter, setFilter] = useState<Filter>("All");
   const [query, setQuery] = useState("");
+  const [onlySaved, setOnlySaved] = useState(false);
+  const [sort, setSort] = useState<SortOrder>("best");
+  const [visibleLimit, setVisibleLimit] = useState(8);
+  const [showHelp, setShowHelp] = useState(false);
   const [saved, setSaved] = useState<string[]>([]);
   const [apps, setApps] = useState<Record<string, AppStatus>>({});
   const [atsJobId, setAtsJobId] = useState<string | null>(null);
@@ -145,13 +162,30 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
     })();
   }, [userId, sb]);
 
-  const visible = useMemo(
-    () => jobs
+  const visible = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    return jobs
       .filter((job) => filter === "All" || job.type === filter)
-      .filter((job) => `${job.company} ${job.role} ${job.location} ${job.requirements.join(" ")}`.toLowerCase().includes(query.toLowerCase()))
-      .sort((a, b) => b.fit - a.fit),
-    [jobs, filter, query],
-  );
+      .filter((job) => !onlySaved || saved.includes(job.id))
+      .filter((job) => `${job.company} ${job.role} ${job.location} ${(job.requirements || []).join(" ")}`.toLowerCase().includes(term))
+      .sort((a, b) => {
+        if (sort === "company") return a.company.localeCompare(b.company);
+        if (sort === "newest") {
+          const aTime = Date.parse(a.posted);
+          const bTime = Date.parse(b.posted);
+          if (Number.isFinite(aTime) && Number.isFinite(bTime)) return bTime - aTime;
+        }
+        return b.fit - a.fit;
+      });
+  }, [jobs, filter, query, onlySaved, saved, sort]);
+
+  const resultJobs = visible.slice(0, visibleLimit);
+  const appliedCount = Object.values(apps).filter(v => v === "applied").length;
+  const nextAction = jobs.length === 0
+    ? { title: "Find your first matches", details: "Run a job scan to find openings suited to your profile.", target: "#scan", action: "Find jobs" }
+    : saved.length === 0
+      ? { title: "Create your shortlist", details: "Open the matches below and bookmark roles you want to apply for.", target: "#jobs", action: "View matches" }
+      : { title: "Make your next application", details: "Open a saved job, review its requirements and use a tailored resume.", target: "#jobs", action: "Go to my jobs" };
 
   async function login(event: React.FormEvent) {
     event.preventDefault();
@@ -195,17 +229,28 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
       ? sb.from("saved_jobs").delete().eq("user_id", profileId).eq("job_id", id)
       : sb.from("saved_jobs").insert({ user_id: profileId, job_id: id });
     const { error } = await queryResult;
-    if (error) setStatus(error.message);
+    if (error) {
+      setSaved((current) => isSaved ? [...current, id] : current.filter((item) => item !== id));
+      setStatus(`Couldn't update saved jobs: ${error.message}`);
+    } else {
+      setStatus(isSaved ? "Removed from saved jobs." : "Job saved to your shortlist.");
+    }
   }
 
   async function setApp(id: string, value: AppStatus) {
     if (!profileId) return;
+    const previous = apps[id] || "new";
     setApps((current) => ({ ...current, [id]: value }));
     const { error } = await sb.from("applications").upsert(
       { user_id: profileId, job_id: id, status: value, applied_at: value === "applied" ? new Date().toISOString() : null },
       { onConflict: "user_id,job_id" },
     );
-    if (error) setStatus(error.message);
+    if (error) {
+      setApps((current) => ({ ...current, [id]: previous }));
+      setStatus(`Couldn't save application status: ${error.message}`);
+    } else {
+      setStatus(`Application status updated: ${statusLabels[value]}.`);
+    }
   }
 
   function autoApply(job: Job) {
@@ -225,8 +270,9 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Search failed");
       setJobs(data.jobs || []);
+      setVisibleLimit(8);
       setAtsJobId(null);
-      setStatus(`${data.jobs?.length || 0} eligible matches found across Tamil Nadu, Kerala and Bengaluru`);
+      setStatus((data.jobs?.length || 0) > 0 ? `Scan finished. ${data.jobs.length} matching jobs found.` : "Scan complete. No eligible new matches found yet. Try more job sources below.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Search failed");
     } finally {
@@ -327,6 +373,22 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
         </section>
 
         <div className="vh-content">
+          <section className="vh-guide" aria-label="Getting started">
+            <div className="vh-guide-top">
+              <span className="vh-guide-kicker"><Compass size={16}/> YOUR NEXT STEP</span>
+              <button type="button" className="vh-help-toggle" aria-expanded={showHelp} onClick={() => setShowHelp(v => !v)}>{showHelp ? "Hide guide" : "How it works"} <ChevronDown size={15}/></button>
+            </div>
+            <div className="vh-guide-main">
+              <span className="vh-guide-icon"><Sparkles size={24}/></span>
+              <div><h2>{nextAction.title}</h2><p>{nextAction.details}</p></div>
+              <a className="vh-guide-cta" href={nextAction.target}>{nextAction.action} <ArrowRight size={16}/></a>
+            </div>
+            {showHelp && <div className="vh-walkthrough">
+              <div><b>1. Find a job</b><span>Tap “Scan new jobs” or browse other job sources.</span></div>
+              <div><b>2. Save and prepare</b><span>Bookmark promising roles and build a resume suited to the job.</span></div>
+              <div><b>3. Apply and track</b><span>Review the application on the employer site, submit it, then update the status here.</span></div>
+            </div>}
+          </section>
           <section className="vh-stats" aria-label="Job search summary">
             <article className="vh-stat"><span className="vh-stat-icon purple"><BriefcaseBusiness size={21}/></span><div><small>Eligible matches</small><strong>{jobs.length}</strong><span>Opportunities found</span></div></article>
             <article className="vh-stat"><span className="vh-stat-icon blue"><CheckCircle2 size={21}/></span><div><small>Applied</small><strong>{Object.values(apps).filter(v => v === "applied").length}</strong><span>Applications sent</span></div></article>
@@ -334,7 +396,7 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
             <article className="vh-stat"><span className="vh-stat-icon orange"><CalendarDays size={21}/></span><div><small>Interviews</small><strong>{Object.values(apps).filter(v => v === "interview").length}</strong><span>In progress</span></div></article>
           </section>
 
-          <section className="vh-scan" aria-label="Refresh job matches">
+          <section id="scan" className="vh-scan" aria-label="Refresh job matches">
             <span className="vh-scan-icon"><RefreshCw size={23}/></span>
             <div className="vh-scan-text"><div><b>Ready for new opportunities?</b><span className="vh-online"><span/> On-demand scan</span></div><p>Refresh your matches from supported job sources.</p><small role="status" aria-live="polite">{status}</small></div>
             <button type="button" disabled={loading} onClick={refresh}>{loading ? <LoaderCircle className="spin" size={17}/> : <RefreshCw size={17}/>} {loading ? "Scanning…" : "Scan new jobs"}</button>
@@ -343,42 +405,55 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
           <section id="jobs" className="vh-results" aria-labelledby="vh-jobs-title">
             <div className="vh-section-title"><div><span><Sparkles size={14}/> CURATED FOR YOU</span><h2 id="vh-jobs-title">Discover your matches <em>{visible.length}</em></h2><p>Relevant roles in QA, development and IT support, ranked by profile fit.</p></div><a href="#discover">More job sources <ArrowRight size={16}/></a></div>
             <div className="vh-toolbar">
-              <label className="vh-search"><Search size={18}/><input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search job, company, city or skill…" aria-label="Search jobs" /></label>
+              <label className="vh-search"><Search size={18}/><input type="search" value={query} onChange={e => { setQuery(e.target.value); setVisibleLimit(8); }} placeholder="Search job title, company, or city" aria-label="Search jobs" /></label>
               <div className="vh-filters" role="group" aria-label="Job category">
-                {(["All", "Testing", "Developer", "System"] as Filter[]).map(f => <button type="button" key={f} className={filter === f ? "selected" : ""} aria-pressed={filter === f} onClick={() => setFilter(f)}>{f === "All" ? "All roles" : f === "Testing" ? "QA / Testing" : f === "System" ? "IT Support" : "Developer"}</button>)}
+                {(["All", "Testing", "Developer", "System"] as Filter[]).map(f => <button type="button" key={f} className={filter === f ? "selected" : ""} aria-pressed={filter === f} onClick={() => { setFilter(f); setVisibleLimit(8); }}>{f === "All" ? "All jobs" : f === "Testing" ? "QA / Testing" : f === "System" ? "IT Support" : "Developer"}</button>)}
               </div>
+            </div>
+            <div className="vh-job-preferences">
+              <button className={onlySaved ? "vh-saved-filter selected" : "vh-saved-filter"} type="button" aria-pressed={onlySaved} onClick={() => {setOnlySaved(v=>!v);setVisibleLimit(8);}}><Bookmark size={16}/> Saved jobs only <span>{saved.length}</span></button>
+              <label className="vh-sort-label"><ListFilter size={16}/> Sort by <select aria-label="Sort job results" value={sort} onChange={e => {setSort(e.target.value as SortOrder); setVisibleLimit(8);}}><option value="best">Best match</option><option value="newest">Most recent</option><option value="company">Company A–Z</option></select></label>
+              <span className="vh-results-count" aria-live="polite">Showing {resultJobs.length} of {visible.length}</span>
             </div>
 
             {visible.length ? <div className="vh-jobs">
-              {visible.map(job => (
+              {resultJobs.map(job => (
                 <article className="vh-job-card" key={job.id}>
                   <header className="vh-job-heading">
-                    <span className="vh-company-mark">{job.company.charAt(0).toUpperCase() || "J"}</span>
+                    <span className="vh-company-mark">{job.company?.charAt(0).toUpperCase() || "J"}</span>
                     <div className="vh-job-heading-text"><span>{job.company}</span><h3>{job.role}</h3></div>
                     <button type="button" className={saved.includes(job.id) ? "vh-save selected" : "vh-save"} aria-label={saved.includes(job.id) ? "Remove saved job" : "Save job"} aria-pressed={saved.includes(job.id)} disabled={!profileId} onClick={() => toggle(job.id)}>{saved.includes(job.id) ? <BookmarkCheck size={20}/> : <Bookmark size={20}/>}</button>
                   </header>
                   <div className="vh-job-meta"><span><MapPin size={14}/>{job.location}</span><span><BriefcaseBusiness size={14}/>{job.experience}</span><span><Clock3 size={14}/>{job.mode}</span></div>
                   <div className="vh-job-labels"><span>{job.type === "Testing" ? "QA / Testing" : job.type === "System" ? "IT Support" : "Development"}</span>{job.salary && <span className="salary">{job.salary}</span>}{job.source && <span>{job.source}</span>}</div>
                   <div className="vh-match"><div><span><Sparkles size={14}/> Profile match</span><b>{job.fit}%</b></div><div className="vh-match-track"><span style={{width: `${Math.max(0,Math.min(100,job.fit))}%`}}/></div></div>
-                  {job.matchedSkills.length > 0 && <div className="vh-skills">{job.matchedSkills.slice(0,4).map(skill => <span key={skill}><CheckCircle2 size={12}/>{skill}</span>)}{job.matchedSkills.length > 4 && <span>+{job.matchedSkills.length - 4} more</span>}</div>}
-                  {job.missingSkills.length > 0 && <p className="vh-gaps"><AlertCircle size={15}/><span><b>Skills to review:</b> {job.missingSkills.join(", ")}</span></p>}
+                  {(job.matchedSkills || []).length > 0 && <div className="vh-skills">{job.matchedSkills.slice(0,4).map(skill => <span key={skill}><CheckCircle2 size={12}/>{skill}</span>)}{job.matchedSkills.length > 4 && <span>+{job.matchedSkills.length - 4} more</span>}</div>}
+                  {(job.missingSkills || []).length > 0 && <p className="vh-gaps"><AlertCircle size={15}/><span><b>Skills to review:</b> {job.missingSkills.join(", ")}</span></p>}
                   <p className="vh-why">{job.whyFit}</p>
                   <div className="vh-job-bottom">
-                    <label>Application status<select value={apps[job.id] || "new"} onChange={e => setApp(job.id,e.target.value as AppStatus)} disabled={!profileId} aria-label={`Application status for ${job.role}`}>{statuses.map(s => <option key={s} value={s}>{s.replace("_"," ")}</option>)}</select></label>
+                    <label>Application status<select value={apps[job.id] || "new"} onChange={e => setApp(job.id,e.target.value as AppStatus)} disabled={!profileId} aria-label={`Application status for ${job.role}`}>{statuses.map(s => <option key={s} value={s}>{statusLabels[s]}</option>)}</select></label>
                     <div className="vh-actions">
-                      <button type="button" className="auto-apply-job-button" onClick={() => autoApply(job)}><Play size={14}/> Apply assistant</button>
+                      <button type="button" className="auto-apply-job-button" onClick={() => autoApply(job)}><Play size={14}/> Get apply help</button>
                       <button type="button" className="ats-resume-button" onClick={() => setAtsJobId(v => v === job.id ? null : job.id)} aria-expanded={atsJobId === job.id}><FileText size={14}/> {atsJobId === job.id ? "Close resume" : "ATS resume"}</button>
-                      <a href={job.applyUrl} target="_blank" rel="noopener noreferrer">Apply <ExternalLink size={14}/></a>
+                      <a href={job.applyUrl} target="_blank" rel="noopener noreferrer" aria-label={`Open ${job.role} application on employer website`}>Job site <ExternalLink size={14}/></a>
                     </div>
                   </div>
                   {atsJobId === job.id && <JobAtsGenerator job={job} onClose={() => setAtsJobId(null)}/>}
                 </article>
               ))}
-            </div> : <div className="vh-empty"><div><Search size={28}/></div><h3>{jobs.length ? "No results for these filters" : "No matches loaded yet"}</h3><p>{jobs.length ? "Try another keyword or category." : "Run a job scan to look for suitable openings. We'll show matching results here when available."}</p><button type="button" onClick={() => {setQuery("");setFilter("All");}}>Clear filters</button><button type="button" onClick={refresh} disabled={loading}>{loading ? "Scanning…" : "Scan jobs"}</button></div>}
+            </div> : <div className="vh-empty"><div><Search size={28}/></div><h3>{jobs.length ? (onlySaved ? "No saved jobs match these filters" : "No jobs match your search") : "No matches loaded yet"}</h3><p>{jobs.length ? "Try a broader search or turn off saved jobs only." : "Run a job scan to find your first opportunities."}</p><button type="button" onClick={() => {setQuery("");setFilter("All");setOnlySaved(false);setVisibleLimit(8);}}>Clear filters</button><button type="button" onClick={refresh} disabled={loading}>{loading ? "Scanning…" : "Scan jobs"}</button></div>}
+            {visible.length > visibleLimit && <div className="vh-load-more"><button type="button" onClick={() => setVisibleLimit(n=>n+8)}>Show 8 more jobs <ChevronDown size={18}/></button><span>{visible.length - visibleLimit} more matches available</span></div>}
           </section>
-          <div className="vh-footnote"><ShieldCheck size={16}/> Review job details and eligibility before submitting applications.</div>
+          <div className="vh-footnote"><ShieldCheck size={16}/> Match scores are estimates. Check each job description before applying. Application statuses are updated by you or the supported desktop helper.</div>
         </div>
       </div>
+      <nav className="vh-mobile-tabs" aria-label="Quick navigation">
+        <a href="#overview"><Compass size={19}/><span>Home</span></a>
+        <a href="#jobs"><Search size={19}/><span>Jobs</span></a>
+        <a href="#discover"><BriefcaseBusiness size={19}/><span>Explore</span></a>
+        <a href="#resume"><FileText size={19}/><span>Resume</span></a>
+        <a href="#applications"><CheckCircle2 size={19}/><span>Apply</span></a>
+      </nav>
     </main>
   );
 }
