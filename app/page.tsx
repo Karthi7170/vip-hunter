@@ -8,9 +8,9 @@ export default function Home() {
   return (
     <>
       <JobDashboard jobs={jobs} />
-      <ResumeGenerator />
-      <ExternalJobSearch />
-      <AutoApplyQueue />
+      <section id="discover" className="section-anchor"><ExternalJobSearch /></section>
+      <section id="resume" className="section-anchor"><ResumeGenerator /></section>
+      <section id="applications" className="section-anchor"><AutoApplyQueue /></section>
     </>
   );
 }

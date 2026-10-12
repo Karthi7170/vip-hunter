@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  AlertCircle,
   ArrowRight,
+  CalendarDays,
+  CheckCircle2,
+  Clock3,
+  FileText,
   Bookmark,
   BookmarkCheck,
   BriefcaseBusiness,
@@ -282,69 +287,98 @@ export default function JobDashboard({ jobs: initialJobs }: { jobs: Job[] }) {
   }
 
   return (
-    <main>
-      <section className="hero">
-        <div className="top">
-          <b className="brand">VIP-Hunter <span className="brand-ai">AI-MAD</span></b>
-          <button onClick={() => sb.auth.signOut()}><LogOut size={16} /> Sign out</button>
-        </div>
-        <h1>Fresh jobs. <span>Matched to your profile.</span></h1>
-        <p>MCA · Fresher/0–1 year · Tamil Nadu — all cities · Kerala — all cities · Bengaluru · WFO priority · ₹3 LPA average target</p>
-      </section>
+    <main className="vh-app" id="overview">
+      <div className="vh-wrap">
+        <header className="vh-header">
+          <a className="vh-brand" href="#overview" aria-label="VIP-Hunter overview">
+            <span className="vh-brand-icon"><BriefcaseBusiness size={22} /></span>
+            <span><b>VIP<span>Hunter</span></b><small>by AI × MAD Studio</small></span>
+          </a>
+          <nav className="vh-nav" aria-label="Sections">
+            <a href="#overview" className="vh-active">Overview</a>
+            <a href="#jobs">Job matches</a>
+            <a href="#discover">Explore</a>
+            <a href="#resume">Resume studio</a>
+            <a href="#applications">Apply assistant</a>
+          </nav>
+          <div className="vh-account">
+            <span className="vh-avatar" aria-hidden="true">{email.trim().slice(0,1).toUpperCase() || "V"}</span>
+            <button type="button" onClick={() => sb.auth.signOut()} aria-label="Sign out"><LogOut size={17} /><span>Sign out</span></button>
+          </div>
+        </header>
 
-      <section className="content">
-        <div className="panel run">
-          <div><b>7-day statewide job scan</b><small>{status}</small></div>
-          <button onClick={refresh} disabled={loading}>{loading ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />} Run now</button>
-        </div>
+        <section className="vh-hero" aria-labelledby="vh-heading">
+          <div className="vh-hero-copy">
+            <span className="vh-eyebrow"><span className="vh-live" /> YOUR PRIVATE CAREER COMMAND CENTER</span>
+            <h1 id="vh-heading">Your next big move <span>starts here.</span></h1>
+            <p>Find roles that fit your skills, create ATS-ready resumes, and organize your job search in one beautiful workspace.</p>
+            <div className="vh-hero-actions">
+              <a href="#jobs" className="vh-primary">Explore matches <ArrowRight size={17}/></a>
+              <a href="#resume" className="vh-outline"><FileText size={17}/> Create a resume</a>
+            </div>
+            <div className="vh-hero-detail"><ShieldCheck size={15}/> Private dashboard <span>·</span> <MapPin size={15}/> Tamil Nadu, Kerala & Bengaluru</div>
+          </div>
+          <div className="vh-orbit-area" aria-hidden="true">
+            <div className="vh-orbit vh-orbit-one"/><div className="vh-orbit vh-orbit-two"/>
+            <div className="vh-orbit-center"><BriefcaseBusiness size={52} strokeWidth={1.6}/></div>
+            <div className="vh-floating vh-float-top"><Sparkles size={16}/> Smart job matches <CheckCircle2 size={15}/></div>
+            <div className="vh-floating vh-float-bottom"><FileText size={16}/> ATS resume builder <CheckCircle2 size={15}/></div>
+          </div>
+        </section>
 
-        <div className="stats">
-          <div><b>{jobs.length}</b><span>All eligible matches</span></div>
-          <div><b>{Object.values(apps).filter((value) => value === "applied").length}</b><span>Applied</span></div>
-          <div><b>{saved.length}</b><span>Saved</span></div>
-        </div>
+        <div className="vh-content">
+          <section className="vh-stats" aria-label="Job search summary">
+            <article className="vh-stat"><span className="vh-stat-icon purple"><BriefcaseBusiness size={21}/></span><div><small>Eligible matches</small><strong>{jobs.length}</strong><span>Opportunities found</span></div></article>
+            <article className="vh-stat"><span className="vh-stat-icon blue"><CheckCircle2 size={21}/></span><div><small>Applied</small><strong>{Object.values(apps).filter(v => v === "applied").length}</strong><span>Applications sent</span></div></article>
+            <article className="vh-stat"><span className="vh-stat-icon pink"><Bookmark size={21}/></span><div><small>Saved roles</small><strong>{saved.length}</strong><span>Your shortlist</span></div></article>
+            <article className="vh-stat"><span className="vh-stat-icon orange"><CalendarDays size={21}/></span><div><small>Interviews</small><strong>{Object.values(apps).filter(v => v === "interview").length}</strong><span>In progress</span></div></article>
+          </section>
 
-        <div className="tools">
-          <label><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search jobs…" /></label>
-          <div>{(["All", "Testing", "Developer", "System"] as Filter[]).map((value) => <button className={filter === value ? "active" : ""} onClick={() => setFilter(value)} key={value}>{value}</button>)}</div>
-        </div>
+          <section className="vh-scan" aria-label="Refresh job matches">
+            <span className="vh-scan-icon"><RefreshCw size={23}/></span>
+            <div className="vh-scan-text"><div><b>Ready for new opportunities?</b><span className="vh-online"><span/> On-demand scan</span></div><p>Refresh your matches from supported job sources.</p><small role="status" aria-live="polite">{status}</small></div>
+            <button type="button" disabled={loading} onClick={refresh}>{loading ? <LoaderCircle className="spin" size={17}/> : <RefreshCw size={17}/>} {loading ? "Scanning…" : "Scan new jobs"}</button>
+          </section>
 
-        <h2>All eligible matches <small>{visible.length} roles</small></h2>
-
-        <div className="jobs">
-          {visible.map((job) => (
-            <article key={job.id}>
-              <div className="score">{job.fit}%<small>MATCH</small></div>
-              <div className="job">
-                <header>
-                  <div><em>{job.company}</em><h3>{job.role}</h3></div>
-                  <button className="icon" onClick={() => toggle(job.id)}>{saved.includes(job.id) ? <BookmarkCheck /> : <Bookmark />}</button>
-                </header>
-
-                <p className="meta"><MapPin size={14} /> {job.location} · {job.experience} · {job.mode} · {job.type}</p>
-                <div className="tags">{job.matchedSkills.map((skill) => <span key={skill}>✓ {skill}</span>)}</div>
-                {job.missingSkills.length > 0 && <p className="missing"><b>Missing/unverified:</b> {job.missingSkills.join(", ")}</p>}
-                <p>{job.whyFit}</p>
-
-                <footer>
-                  <select value={apps[job.id] || "new"} onChange={(event) => setApp(job.id, event.target.value as AppStatus)}>
-                    {statuses.map((value) => <option key={value} value={value}>{value.replace("_", " ")}</option>)}
-                  </select>
-                  <button type="button" className="auto-apply-job-button" onClick={() => autoApply(job)}>
-                    <Play size={14} /> Auto Apply
-                  </button>
-                  <button type="button" className="ats-resume-button" onClick={() => setAtsJobId((current) => current === job.id ? null : job.id)}>
-                    <Sparkles size={14} /> {atsJobId === job.id ? "Close ATS Generator" : "ATS Resume"}
-                  </button>
-                  <a href={job.applyUrl} target="_blank" rel="noreferrer">Apply manually <ExternalLink size={14} /></a>
-                </footer>
-
-                {atsJobId === job.id && <JobAtsGenerator job={job} onClose={() => setAtsJobId(null)} />}
+          <section id="jobs" className="vh-results" aria-labelledby="vh-jobs-title">
+            <div className="vh-section-title"><div><span><Sparkles size={14}/> CURATED FOR YOU</span><h2 id="vh-jobs-title">Discover your matches <em>{visible.length}</em></h2><p>Relevant roles in QA, development and IT support, ranked by profile fit.</p></div><a href="#discover">More job sources <ArrowRight size={16}/></a></div>
+            <div className="vh-toolbar">
+              <label className="vh-search"><Search size={18}/><input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search job, company, city or skill…" aria-label="Search jobs" /></label>
+              <div className="vh-filters" role="group" aria-label="Job category">
+                {(["All", "Testing", "Developer", "System"] as Filter[]).map(f => <button type="button" key={f} className={filter === f ? "selected" : ""} aria-pressed={filter === f} onClick={() => setFilter(f)}>{f === "All" ? "All roles" : f === "Testing" ? "QA / Testing" : f === "System" ? "IT Support" : "Developer"}</button>)}
               </div>
-            </article>
-          ))}
+            </div>
+
+            {visible.length ? <div className="vh-jobs">
+              {visible.map(job => (
+                <article className="vh-job-card" key={job.id}>
+                  <header className="vh-job-heading">
+                    <span className="vh-company-mark">{job.company.charAt(0).toUpperCase() || "J"}</span>
+                    <div className="vh-job-heading-text"><span>{job.company}</span><h3>{job.role}</h3></div>
+                    <button type="button" className={saved.includes(job.id) ? "vh-save selected" : "vh-save"} aria-label={saved.includes(job.id) ? "Remove saved job" : "Save job"} aria-pressed={saved.includes(job.id)} disabled={!profileId} onClick={() => toggle(job.id)}>{saved.includes(job.id) ? <BookmarkCheck size={20}/> : <Bookmark size={20}/>}</button>
+                  </header>
+                  <div className="vh-job-meta"><span><MapPin size={14}/>{job.location}</span><span><BriefcaseBusiness size={14}/>{job.experience}</span><span><Clock3 size={14}/>{job.mode}</span></div>
+                  <div className="vh-job-labels"><span>{job.type === "Testing" ? "QA / Testing" : job.type === "System" ? "IT Support" : "Development"}</span>{job.salary && <span className="salary">{job.salary}</span>}{job.source && <span>{job.source}</span>}</div>
+                  <div className="vh-match"><div><span><Sparkles size={14}/> Profile match</span><b>{job.fit}%</b></div><div className="vh-match-track"><span style={{width: `${Math.max(0,Math.min(100,job.fit))}%`}}/></div></div>
+                  {job.matchedSkills.length > 0 && <div className="vh-skills">{job.matchedSkills.slice(0,4).map(skill => <span key={skill}><CheckCircle2 size={12}/>{skill}</span>)}{job.matchedSkills.length > 4 && <span>+{job.matchedSkills.length - 4} more</span>}</div>}
+                  {job.missingSkills.length > 0 && <p className="vh-gaps"><AlertCircle size={15}/><span><b>Skills to review:</b> {job.missingSkills.join(", ")}</span></p>}
+                  <p className="vh-why">{job.whyFit}</p>
+                  <div className="vh-job-bottom">
+                    <label>Application status<select value={apps[job.id] || "new"} onChange={e => setApp(job.id,e.target.value as AppStatus)} disabled={!profileId} aria-label={`Application status for ${job.role}`}>{statuses.map(s => <option key={s} value={s}>{s.replace("_"," ")}</option>)}</select></label>
+                    <div className="vh-actions">
+                      <button type="button" className="auto-apply-job-button" onClick={() => autoApply(job)}><Play size={14}/> Apply assistant</button>
+                      <button type="button" className="ats-resume-button" onClick={() => setAtsJobId(v => v === job.id ? null : job.id)} aria-expanded={atsJobId === job.id}><FileText size={14}/> {atsJobId === job.id ? "Close resume" : "ATS resume"}</button>
+                      <a href={job.applyUrl} target="_blank" rel="noopener noreferrer">Apply <ExternalLink size={14}/></a>
+                    </div>
+                  </div>
+                  {atsJobId === job.id && <JobAtsGenerator job={job} onClose={() => setAtsJobId(null)}/>}
+                </article>
+              ))}
+            </div> : <div className="vh-empty"><div><Search size={28}/></div><h3>{jobs.length ? "No results for these filters" : "No matches loaded yet"}</h3><p>{jobs.length ? "Try another keyword or category." : "Run a job scan to look for suitable openings. We'll show matching results here when available."}</p><button type="button" onClick={() => {setQuery("");setFilter("All");}}>Clear filters</button><button type="button" onClick={refresh} disabled={loading}>{loading ? "Scanning…" : "Scan jobs"}</button></div>}
+          </section>
+          <div className="vh-footnote"><ShieldCheck size={16}/> Review job details and eligibility before submitting applications.</div>
         </div>
-      </section>
+      </div>
     </main>
   );
 }
