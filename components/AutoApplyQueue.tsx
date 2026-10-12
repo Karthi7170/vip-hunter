@@ -124,6 +124,8 @@ export default function AutoApplyQueue() {
   const [jobs, setJobs] = useState<QueueJob[]>([]);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [mobileJobId, setMobileJobId] = useState<string | null>(null);
   const [mobileMode, setMobileMode] = useState(false);
@@ -136,18 +138,41 @@ export default function AutoApplyQueue() {
 
   useEffect(() => {
     let active = true;
+    sb.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      setAuthUserId(data.session?.user.id || null);
+      setAuthChecked(true);
+    });
+
+    const { data } = sb.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+      setAuthUserId(session?.user.id || null);
+      setAuthChecked(true);
+    });
+
+    return () => {
+      active = false;
+      data.subscription.unsubscribe();
+    };
+  }, [sb]);
+
+  useEffect(() => {
+    let active = true;
+    if (!authChecked) return;
+    setReady(false);
+    setJobs([]);
+    setProfileId(null);
+
+    if (!authUserId) {
+      setReady(true);
+      return;
+    }
 
     (async () => {
-      const { data: auth } = await sb.auth.getUser();
-      if (!active || !auth.user) {
-        setReady(true);
-        return;
-      }
-
       const { data: profile } = await sb
         .from("user_profiles")
         .select("id")
-        .eq("auth_user_id", auth.user.id)
+        .eq("auth_user_id", authUserId)
         .maybeSingle();
 
       if (!active || !profile) {
@@ -203,7 +228,7 @@ export default function AutoApplyQueue() {
     return () => {
       active = false;
     };
-  }, [sb]);
+  }, [sb, authChecked, authUserId]);
 
   useEffect(() => {
     if (mobileMode) return;
@@ -494,7 +519,7 @@ export default function AutoApplyQueue() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mobileMode, extensionReady, preparing, mobileJobId, profileId]);
 
-  if (!ready) return null;
+  if (!ready || !authUserId) return null;
 
   const autoReadyCount = jobs.filter((job) => job.supported && job.jobDescription.length >= 80).length;
 
